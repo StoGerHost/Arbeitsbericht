@@ -38,6 +38,32 @@
     font-family:"IBM Plex Mono",monospace; text-decoration:none;
   }
   a.btn.secondary:hover{border-color:var(--blue); color:var(--text);}
+
+  .lookup{margin-top:24px; padding-top:22px; border-top:1px solid var(--line); text-align:left;}
+  .lookup label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:6px;}
+  .lookup-row{display:flex; gap:8px;}
+  .lookup input{
+    flex:1; background:#1b232b; border:1px solid var(--line); color:var(--text);
+    padding:10px 11px; border-radius:2px; font-size:14px; font-family:inherit;
+  }
+  .lookup input:focus{outline:none; border-color:var(--blue);}
+  .lookup button{
+    background:var(--blue); color:#0e1318; border:none; padding:10px 14px; border-radius:2px;
+    font-weight:600; font-family:"IBM Plex Mono",monospace; font-size:13px; cursor:pointer;
+  }
+  .lookup button:hover{background:#5da3cf;}
+  .lookup-results{margin-top:12px; font-size:13px;}
+  .lookup-item{
+    background:#1b232b; border:1px solid var(--line); border-radius:2px;
+    padding:10px 12px; margin-bottom:8px;
+  }
+  .lookup-item .bv{font-weight:600; margin-bottom:2px;}
+  .lookup-item .kd{color:var(--muted); font-size:12px; margin-bottom:6px;}
+  .lookup-item a.tel{
+    color:var(--amber); text-decoration:none; font-family:"IBM Plex Mono",monospace; font-size:13.5px;
+  }
+  .lookup-item a.tel:hover{text-decoration:underline;}
+  .lookup-state{color:var(--muted); font-size:12.5px; margin-top:10px;}
 </style>
 </head>
 <body>
@@ -47,6 +73,59 @@
     <p>Auftrag erfassen, abschließen und als PDF exportieren.</p>
     <a class="btn primary" href="arbeitsbericht.html">Arbeitsbericht öffnen →</a>
     <a class="btn secondary" href="uebersicht.html">Berichtsübersicht (Büro) →</a>
+
+    <div class="lookup">
+      <label>Ansprechpartner &amp; Telefon suchen</label>
+      <div class="lookup-row">
+        <input type="text" id="lookupInput" placeholder="Bauvorhaben, Kunde oder Name...">
+        <button id="lookupBtn">Suchen</button>
+      </div>
+      <div class="lookup-results" id="lookupResults"></div>
+    </div>
   </div>
+
+<script>
+const SUPABASE_URL = 'https://guuywhrzygcnpzrnnlsw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1dXl3aHJ6eWdjbnB6cm5ubHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MjcyOTIsImV4cCI6MjA5OTMwMzI5Mn0.tvPfk5j6mXNG2YcYl4cUR-rF-T3QWdTGuOZ8SHRSv2U';
+
+function supabaseHeaders(){
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY };
+}
+function esc(s){ return (s || '').toString().replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+async function sucheKontakt(){
+  const term = document.getElementById('lookupInput').value.trim();
+  const resultsEl = document.getElementById('lookupResults');
+  if(!term){ resultsEl.innerHTML = ''; return; }
+
+  resultsEl.innerHTML = '<div class="lookup-state">Suche ...</div>';
+  try{
+    const filter = `bauvorhaben.ilike.*${term}*,kunde.ilike.*${term}*,ansprechpartner.ilike.*${term}*`;
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/kontakte?or=(${encodeURIComponent(filter)})&select=*&order=updated_at.desc&limit=10`,
+      { headers: supabaseHeaders() }
+    );
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+
+    if(!rows.length){
+      resultsEl.innerHTML = '<div class="lookup-state">Kein Treffer gefunden.</div>';
+      return;
+    }
+    resultsEl.innerHTML = rows.map(r => `
+      <div class="lookup-item">
+        <div class="bv">${esc(r.bauvorhaben) || 'Ohne Bauvorhaben'}</div>
+        <div class="kd">${esc(r.kunde) || '-'} · ${esc(r.ansprechpartner) || 'kein Ansprechpartner erfasst'}</div>
+        ${r.telefon ? `<a class="tel" href="tel:${esc(r.telefon).replace(/\s+/g,'')}">📞 ${esc(r.telefon)}</a>` : '<span style="color:var(--muted);font-size:12.5px;">keine Telefonnummer erfasst</span>'}
+      </div>
+    `).join('');
+  } catch(err){
+    console.error(err);
+    resultsEl.innerHTML = '<div class="lookup-state" style="color:#c9604f;">Suche fehlgeschlagen (' + err.message + ').</div>';
+  }
+}
+document.getElementById('lookupBtn').addEventListener('click', sucheKontakt);
+document.getElementById('lookupInput').addEventListener('keydown', e => { if(e.key === 'Enter') sucheKontakt(); });
+</script>
 </body>
 </html>

@@ -294,7 +294,21 @@ function renderListe(){
       if(!isOpen){
         body.innerHTML = renderDetail(list[idx]);
         body.classList.add('open');
-        body.querySelector('.pdf-btn').addEventListener('click', () => erzeugePdf(list[idx]));
+        const btn = body.querySelector('.pdf-btn');
+        btn.addEventListener('click', async () => {
+          const original = btn.textContent;
+          btn.textContent = 'Erzeuge PDF ...';
+          btn.disabled = true;
+          try{
+            await erzeugePdf(list[idx]);
+          } catch(err){
+            console.error('PDF-Erzeugung fehlgeschlagen:', err);
+            alert('PDF konnte nicht erzeugt werden: ' + err.message);
+          } finally {
+            btn.textContent = original;
+            btn.disabled = false;
+          }
+        });
       }
     });
   });
@@ -356,8 +370,19 @@ function renderDetail(b){
   `;
 }
 
+function formatAusDataUrl(dataUrl){
+  const m = dataUrl.match(/^data:image\/(\w+);/);
+  if(!m) return 'JPEG';
+  const typ = m[1].toLowerCase();
+  if(typ === 'png') return 'PNG';
+  if(typ === 'webp') return 'WEBP';
+  if(typ === 'gif') return 'GIF';
+  return 'JPEG';
+}
+
 async function bildAlsDataUrl(url){
   const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP ' + res.status + ' beim Laden von ' + url);
   const blob = await res.blob();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -466,14 +491,23 @@ async function erzeugePdf(b){
     doc.text('Fotos', margin, y); y += 7;
     let x = margin;
     const imgW = 55, imgH = 55, gap = 6;
+    let fehlerAnzahl = 0;
     for(const url of d.foto_urls){
       if(x + imgW > pageW - margin){ x = margin; y += imgH + gap; }
       if(y + imgH > 280){ doc.addPage(); y = 20; x = margin; }
       try{
         const data = await bildAlsDataUrl(url);
-        doc.addImage(data, 'JPEG', x, y, imgW, imgH);
-      } catch(err){ console.error('Foto konnte nicht geladen werden:', err); }
+        doc.addImage(data, formatAusDataUrl(data), x, y, imgW, imgH);
+      } catch(err){
+        console.error('Foto konnte nicht geladen werden:', url, err);
+        fehlerAnzahl++;
+      }
       x += imgW + gap;
+    }
+    if(fehlerAnzahl){
+      y += imgH + 10;
+      doc.setFont('helvetica','italic'); doc.setFontSize(9);
+      doc.text(`${fehlerAnzahl} von ${d.foto_urls.length} Foto(s) konnten nicht geladen werden.`, margin, y);
     }
   }
 

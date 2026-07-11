@@ -342,14 +342,32 @@ function renderDetail(b){
       ${d.kein_abnehmer_vor_ort
         ? 'Unterschriftsberechtigter nicht vor Ort'
         : `${esc(d.kundenname) || 'kein Name erfasst'}${d.abnehmer_funktion ? ' — ' + esc(d.abnehmer_funktion) : ''}
-           <br><span style="color:var(--muted);font-size:12px;">Hinweis: die grafische Unterschrift und Fotos werden nicht in der Datenbank gespeichert, nur im lokal erzeugten PDF.</span>`}
+           ${d.unterschrift_url ? `<br><img src="${esc(d.unterschrift_url)}" style="max-width:220px;background:#fff;border-radius:2px;margin-top:8px;">` : `<br><span style="color:var(--muted);font-size:12px;">Keine Unterschrift in der Datenbank gespeichert (Speichern-Schalter war aus).</span>`}`}
     </div>
+
+    ${(d.foto_urls && d.foto_urls.length) ? `
+      <p class="section-label">Fotos (${d.foto_urls.length})</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px;">
+        ${d.foto_urls.map(u => `<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:2px; border:1px solid var(--line);"></a>`).join('')}
+      </div>
+    ` : ''}
 
     <button class="pdf-btn">PDF neu erzeugen</button>
   `;
 }
 
-function erzeugePdf(b){
+async function bildAlsDataUrl(url){
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function erzeugePdf(b){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'mm', format:'a4'});
   const margin = 16, pageW = 210;
@@ -423,11 +441,40 @@ function erzeugePdf(b){
   if(d.kein_abnehmer_vor_ort){
     doc.setFont('helvetica','italic');
     doc.text('Unterschriftsberechtigter nicht vor Ort', margin, y);
-  } else {
-    doc.text('(Unterschrift und Fotos werden nicht in der Datenbank gespeichert — nur im original lokal erzeugten PDF)', margin, y, {maxWidth: pageW - margin*2});
     y += 10;
+  } else {
+    if(d.unterschrift_url){
+      try{
+        const sigData = await bildAlsDataUrl(d.unterschrift_url);
+        doc.addImage(sigData, 'PNG', margin, y, 70, 32);
+        y += 36;
+      } catch(err){
+        console.error('Unterschrift konnte nicht geladen werden:', err);
+        doc.text('(Unterschrift konnte nicht geladen werden)', margin, y); y += 8;
+      }
+    } else {
+      doc.text('(Unterschrift nicht in der Datenbank gespeichert)', margin, y, {maxWidth: pageW - margin*2});
+      y += 10;
+    }
     doc.text('Name: ' + (d.kundenname || '-'), margin, y); y += 6;
-    if(d.abnehmer_funktion){ doc.text('Funktion: ' + d.abnehmer_funktion, margin, y); }
+    if(d.abnehmer_funktion){ doc.text('Funktion: ' + d.abnehmer_funktion, margin, y); y += 6; }
+  }
+
+  if(d.foto_urls && d.foto_urls.length){
+    if(y > 230){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Fotos', margin, y); y += 7;
+    let x = margin;
+    const imgW = 55, imgH = 55, gap = 6;
+    for(const url of d.foto_urls){
+      if(x + imgW > pageW - margin){ x = margin; y += imgH + gap; }
+      if(y + imgH > 280){ doc.addPage(); y = 20; x = margin; }
+      try{
+        const data = await bildAlsDataUrl(url);
+        doc.addImage(data, 'JPEG', x, y, imgW, imgH);
+      } catch(err){ console.error('Foto konnte nicht geladen werden:', err); }
+      x += imgW + gap;
+    }
   }
 
   const filename = `Arbeitsbericht_${(b.angebotsnr || 'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}_neu.pdf`;

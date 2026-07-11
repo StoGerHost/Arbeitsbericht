@@ -99,6 +99,11 @@
 
   .state{text-align:center; color:var(--muted); padding:40px 20px; font-size:14px;}
   .state.err{color:var(--danger);}
+  .db-status{display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--muted); font-family:"IBM Plex Mono",monospace; cursor:pointer; white-space:nowrap;}
+  .db-dot{width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--muted); flex-shrink:0;}
+  .db-dot.green{background:var(--ok); box-shadow:0 0 6px rgba(92,158,124,0.7);}
+  .db-dot.yellow{background:#e0c34a; box-shadow:0 0 6px rgba(224,195,74,0.7);}
+  .db-dot.red{background:var(--danger); box-shadow:0 0 6px rgba(201,96,79,0.7);}
 </style>
 </head>
 <body>
@@ -120,7 +125,13 @@
         <p class="eyebrow">Blueprint · TS-Suite</p>
         <h1>Berichtsübersicht</h1>
       </div>
-      <a href="index.html" style="color:var(--muted); font-size:12.5px; text-decoration:underline; white-space:nowrap; padding-top:4px;">← Zurück zur Startseite</a>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+        <a href="index.html" style="color:var(--muted); font-size:12.5px; text-decoration:underline; white-space:nowrap;">← Zurück zur Startseite</a>
+        <span class="db-status" id="dbStatus" title="Zum Neu-Prüfen antippen">
+          <span class="db-dot" id="dbDot"></span>
+          <span id="dbLabel">prüfe ...</span>
+        </span>
+      </div>
     </div>
   </header>
 
@@ -180,6 +191,7 @@ function checkPassword(){
     document.getElementById('appContent').style.display = 'block';
     sessionStorage.setItem('ts_uebersicht_auth', '1');
     ladeBerichte();
+    pruefeDbStatus();
   } else {
     document.getElementById('pwErr').textContent = 'Falscher Zugangscode.';
   }
@@ -187,7 +199,40 @@ function checkPassword(){
 if(sessionStorage.getItem('ts_uebersicht_auth') === '1'){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('appContent').style.display = 'block';
+  ladeBerichte();
+  pruefeDbStatus();
 }
+
+/* ---------- DB-Status-Ampel ---------- */
+async function pruefeDbStatus(){
+  const dot = document.getElementById('dbDot');
+  const label = document.getElementById('dbLabel');
+  dot.className = 'db-dot';
+  label.textContent = 'prüfe ...';
+
+  try{
+    const start = Date.now();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/berichte?select=id&limit=1`, { headers: supabaseHeaders() });
+    const dauer = Date.now() - start;
+    if(res.ok){
+      if(dauer > 3000){
+        dot.classList.add('yellow');
+        label.textContent = 'langsam (' + Math.round(dauer/1000) + 's)';
+      } else {
+        dot.classList.add('green');
+        label.textContent = 'verbunden';
+      }
+    } else {
+      dot.classList.add('yellow');
+      label.textContent = 'Fehler (' + res.status + ')';
+    }
+  } catch(err){
+    dot.classList.add('red');
+    label.textContent = 'nicht erreichbar';
+  }
+}
+document.getElementById('dbStatus').addEventListener('click', pruefeDbStatus);
+setInterval(() => { if(document.getElementById('appContent').style.display !== 'none') pruefeDbStatus(); }, 120000);
 
 let alleBerichte = [];
 

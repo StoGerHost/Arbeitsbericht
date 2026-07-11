@@ -166,6 +166,12 @@
   .generate button:hover{background:#f3a361;}
   .generate button:disabled{background:var(--line); color:var(--muted); cursor:not-allowed;}
   .gen-status{text-align:center; font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;}
+  .gen-status.err{color:var(--danger);}
+  .db-status{display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--muted); font-family:"IBM Plex Mono",monospace; cursor:pointer; white-space:nowrap;}
+  .db-dot{width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--muted); flex-shrink:0;}
+  .db-dot.green{background:var(--ok); box-shadow:0 0 6px rgba(92,158,124,0.7);}
+  .db-dot.yellow{background:#e0c34a; box-shadow:0 0 6px rgba(224,195,74,0.7);}
+  .db-dot.red{background:var(--danger); box-shadow:0 0 6px rgba(201,96,79,0.7);}
 </style>
 </head>
 <body>
@@ -177,7 +183,13 @@
       <h1>Arbeitsbericht</h1>
       <div class="sub">Auftrag erfassen, abschließen, als PDF exportieren</div>
     </div>
-    <button id="adminBtn" title="Techniker-Verwaltung" style="background:transparent;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:var(--radius);cursor:pointer;font-size:15px;">⚙</button>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+      <button id="adminBtn" title="Techniker-Verwaltung" style="background:transparent;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:var(--radius);cursor:pointer;font-size:15px;">⚙</button>
+      <span class="db-status" id="dbStatus" title="Zum Neu-Prüfen antippen">
+        <span class="db-dot" id="dbDot"></span>
+        <span id="dbLabel">prüfe ...</span>
+      </span>
+    </div>
   </div>
 </header>
 
@@ -963,6 +975,10 @@ async function generateReport(){
 
     if(sendResult.ok){
       genStatus.textContent = 'Bericht an Server übertragen und lokal gespeichert: ' + filename;
+      if(medien.fehler && medien.fehler.length){
+        genStatus.textContent += ' — Achtung, Medien-Upload teilweise fehlgeschlagen: ' + medien.fehler.join('; ');
+        genStatus.className = 'gen-status err';
+      }
     } else if(sendResult.reason === 'not-configured'){
       genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' (Server noch nicht eingerichtet)';
     } else {
@@ -1093,15 +1109,19 @@ async function ladeBildHoch(pfad, dataUrl){
 
 async function ladeMedienHoch(angebotsnr){
   const bilderSpeichern = localStorage.getItem('ts_bilder_speichern') === '1';
-  if(!bilderSpeichern || !SUPABASE_CONFIGURED) return { fotoUrls: [], unterschriftUrl: null };
+  if(!bilderSpeichern || !SUPABASE_CONFIGURED) return { fotoUrls: [], unterschriftUrl: null, fehler: [] };
 
   const ordner = (angebotsnr || 'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'') + '_' + Date.now();
   const fotoUrls = [];
+  const fehler = [];
   for(let i = 0; i < photos.length; i++){
     try{
       const url = await ladeBildHoch(`${ordner}/foto_${i+1}.jpg`, photos[i].dataUrl);
       fotoUrls.push(url);
-    } catch(err){ console.error('Foto-Upload fehlgeschlagen:', err); }
+    } catch(err){
+      console.error('Foto-Upload fehlgeschlagen:', err);
+      fehler.push('Foto ' + (i+1) + ': ' + err.message);
+    }
   }
 
   let unterschriftUrl = null;
@@ -1109,10 +1129,13 @@ async function ladeMedienHoch(angebotsnr){
   if(!keinAbnehmer && hasSig){
     try{
       unterschriftUrl = await ladeBildHoch(`${ordner}/unterschrift.png`, canvas.toDataURL('image/png'));
-    } catch(err){ console.error('Unterschrift-Upload fehlgeschlagen:', err); }
+    } catch(err){
+      console.error('Unterschrift-Upload fehlgeschlagen:', err);
+      fehler.push('Unterschrift: ' + err.message);
+    }
   }
 
-  return { fotoUrls, unterschriftUrl };
+  return { fotoUrls, unterschriftUrl, fehler };
 }
 
 async function sendeBerichtAnServer(reportData){
@@ -1134,6 +1157,43 @@ async function sendeBerichtAnServer(reportData){
 /* Beim Start: gecachte Kontakte laden, dann mit Server abgleichen */
 ladeKontakteAusCache();
 syncKontakteVonServer();
+
+/* ---------- DB-Status-Ampel ---------- */
+async function pruefeDbStatus(){
+  const dot = document.getElementById('dbDot');
+  const label = document.getElementById('dbLabel');
+  dot.className = 'db-dot';
+  label.textContent = 'prüfe ...';
+
+  if(!SUPABASE_CONFIGURED){
+    dot.classList.add('yellow');
+    label.textContent = 'nicht eingerichtet';
+    return;
+  }
+  try{
+    const start = Date.now();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kontakte?select=bauvorhaben&limit=1`, { headers: supabaseHeaders() });
+    const dauer = Date.now() - start;
+    if(res.ok){
+      if(dauer > 3000){
+        dot.classList.add('yellow');
+        label.textContent = 'langsam (' + Math.round(dauer/1000) + 's)';
+      } else {
+        dot.classList.add('green');
+        label.textContent = 'verbunden';
+      }
+    } else {
+      dot.classList.add('yellow');
+      label.textContent = 'Fehler (' + res.status + ')';
+    }
+  } catch(err){
+    dot.classList.add('red');
+    label.textContent = 'nicht erreichbar';
+  }
+}
+document.getElementById('dbStatus').addEventListener('click', pruefeDbStatus);
+pruefeDbStatus();
+setInterval(pruefeDbStatus, 120000); // alle 2 Minuten erneut prüfen
 
 /* ---------- Lieferanschrift Toggle ---------- */
 document.getElementById('toggleLieferanschrift').addEventListener('click', () => {

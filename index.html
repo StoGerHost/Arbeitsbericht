@@ -27,10 +27,17 @@
   h1{font-size:22px; margin:0 0 10px; font-weight:600;}
   p{color:var(--muted); font-size:14px; margin:0 0 26px; line-height:1.5;}
   a.btn{
-    display:block; background:var(--amber); color:#1a1208; text-decoration:none;
-    padding:14px; border-radius:2px; font-weight:600; font-family:"IBM Plex Mono",monospace;
+    display:block; text-decoration:none; padding:14px; border-radius:2px;
+    font-weight:600; font-family:"IBM Plex Mono",monospace; font-size:14px;
   }
-  a.btn:hover{background:#f3a361;}
+  a.btn.primary{background:var(--amber); color:#1a1208;}
+  a.btn.primary:hover{background:#f3a361;}
+  a.btn.secondary{
+    display:block; background:transparent; color:var(--muted); border:1px solid var(--line);
+    margin-top:10px; font-size:12.5px; padding:11px 14px; font-weight:600;
+    font-family:"IBM Plex Mono",monospace; text-decoration:none;
+  }
+  a.btn.secondary:hover{border-color:var(--blue); color:var(--text);}
 </style>
 </head>
 <body>
@@ -38,7 +45,8 @@
     <p class="eyebrow">Blueprint · TS-Suite</p>
     <h1>Arbeitsbericht</h1>
     <p>Auftrag erfassen, abschließen und als PDF exportieren.</p>
-    <a class="btn" href="arbeitsbericht.html">Arbeitsbericht öffnen →</a>
+    <a class="btn primary" href="arbeitsbericht.html">Arbeitsbericht öffnen →</a>
+    <a class="btn secondary" href="uebersicht.html">Berichtsübersicht (Büro) →</a>
   </div>
 </body>
 </html>

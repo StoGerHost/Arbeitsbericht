@@ -912,10 +912,6 @@ async function generateReport(){
       }
     }
 
-    const filename = `Arbeitsbericht_${(val('fAngebotsnr')||'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}.pdf`;
-    doc.save(filename);
-    genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' — sende an Server ...';
-
     const zeitDaten = zeitBlocks.map(b => ({
       techniker: b.name, primary: b.primary,
       tage: b.rows.map(r => ({datum: r.datum, stunden: r.stunden, wegepauschale: r.wegepauschale}))
@@ -940,13 +936,23 @@ async function generateReport(){
         anzahl_fotos: photos.length
       }
     };
+
+    /* Erst an den Server senden, DANACH das PDF lokal öffnen/speichern.
+       Grund: doc.save() öffnet auf iOS ein neues Tab/Fenster, wodurch die
+       Seite in den Hintergrund geschoben wird — laufende Netzwerk-Requests
+       können danach abgebrochen/verzögert werden. Deshalb zuerst der Upload. */
+    genStatus.textContent = 'Sende an Server ...';
     const sendResult = await sendeBerichtAnServer(reportData);
+
+    const filename = `Arbeitsbericht_${(val('fAngebotsnr')||'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}.pdf`;
+    doc.save(filename);
+
     if(sendResult.ok){
-      genStatus.textContent = 'Bericht erstellt und an Server übertragen: ' + filename;
+      genStatus.textContent = 'Bericht an Server übertragen und lokal gespeichert: ' + filename;
     } else if(sendResult.reason === 'not-configured'){
       genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' (Server noch nicht eingerichtet)';
     } else {
-      genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' — Server-Übertragung fehlgeschlagen, bitte später erneut versuchen.';
+      genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' — Server-Übertragung fehlgeschlagen (' + sendResult.reason + '), bitte später erneut versuchen.';
     }
   } catch(err){
     genStatus.textContent = 'Fehler beim Erstellen des Berichts.';

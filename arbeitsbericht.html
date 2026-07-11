@@ -200,6 +200,15 @@
       <input type="text" id="newTechName" placeholder="Name neuer Techniker" style="flex:1;">
       <button class="icon-btn" id="addTechBtn" style="width:44px;color:var(--ok);border-color:var(--ok);">+</button>
     </div>
+    <div style="border-top:1px solid var(--line);padding:14px 0;">
+      <label style="display:flex; align-items:center; gap:8px; margin:0; color:var(--text); font-size:14px; cursor:pointer;">
+        <input type="checkbox" id="bilderSpeichernToggle" style="width:17px;height:17px;accent-color:var(--amber);">
+        Fotos &amp; Unterschrift zentral speichern
+      </label>
+      <div style="font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.4;">
+        Wenn aktiv, werden Fotos und Unterschrift zusätzlich zum lokalen PDF auch in die Datenbank hochgeladen (Supabase Storage) und sind dann in der Büroübersicht sichtbar. Verbraucht Speicherplatz — bei Bedarf ausschalten.
+      </div>
+    </div>
     <div style="border-top:1px solid var(--line);padding-top:14px;">
       <button class="add-btn" id="switchTechBtn" style="width:100%;text-align:center;margin-bottom:8px;">Techniker dieses Geräts ändern</button>
       <button class="clear-link" id="closeAdmin">schließen</button>
@@ -305,6 +314,7 @@
       <label>Datei wählen<input type="file" accept="image/*" multiple id="photoFile"></label>
     </div>
     <div class="thumbs" id="thumbs"></div>
+    <div class="pdf-status" id="medienStatus" style="margin-top:10px;"></div>
   </div>
 
   <div class="card">
@@ -943,6 +953,9 @@ async function generateReport(){
        Seite in den Hintergrund geschoben wird — laufende Netzwerk-Requests
        können danach abgebrochen/verzögert werden. Deshalb zuerst der Upload. */
     genStatus.textContent = 'Sende an Server ...';
+    const medien = await ladeMedienHoch(val('fAngebotsnr'));
+    reportData.daten.foto_urls = medien.fotoUrls;
+    reportData.daten.unterschrift_url = medien.unterschriftUrl;
     const sendResult = await sendeBerichtAnServer(reportData);
 
     const filename = `Arbeitsbericht_${(val('fAngebotsnr')||'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}.pdf`;
@@ -1064,6 +1077,44 @@ document.getElementById('fAnsprechpartner').addEventListener('blur', upsertKonta
 document.getElementById('fTelefon').addEventListener('blur', upsertKontakt);
 
 /* ---------- Bericht an Server senden ---------- */
+const STORAGE_BUCKET = 'berichte-medien';
+
+async function ladeBildHoch(pfad, dataUrl){
+  const blob = await (await fetch(dataUrl)).blob();
+  const contentType = blob.type || 'image/png';
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${pfad}`, {
+    method: 'POST',
+    headers: supabaseHeaders({ 'Content-Type': contentType, 'x-upsert': 'true' }),
+    body: blob
+  });
+  if(!res.ok) throw new Error('Upload fehlgeschlagen (' + res.status + ')');
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${pfad}`;
+}
+
+async function ladeMedienHoch(angebotsnr){
+  const bilderSpeichern = localStorage.getItem('ts_bilder_speichern') === '1';
+  if(!bilderSpeichern || !SUPABASE_CONFIGURED) return { fotoUrls: [], unterschriftUrl: null };
+
+  const ordner = (angebotsnr || 'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'') + '_' + Date.now();
+  const fotoUrls = [];
+  for(let i = 0; i < photos.length; i++){
+    try{
+      const url = await ladeBildHoch(`${ordner}/foto_${i+1}.jpg`, photos[i].dataUrl);
+      fotoUrls.push(url);
+    } catch(err){ console.error('Foto-Upload fehlgeschlagen:', err); }
+  }
+
+  let unterschriftUrl = null;
+  const keinAbnehmer = document.getElementById('keinAbnehmer').checked;
+  if(!keinAbnehmer && hasSig){
+    try{
+      unterschriftUrl = await ladeBildHoch(`${ordner}/unterschrift.png`, canvas.toDataURL('image/png'));
+    } catch(err){ console.error('Unterschrift-Upload fehlgeschlagen:', err); }
+  }
+
+  return { fotoUrls, unterschriftUrl };
+}
+
 async function sendeBerichtAnServer(reportData){
   if(!SUPABASE_CONFIGURED) return { ok: false, reason: 'not-configured' };
   try{
@@ -1144,8 +1195,22 @@ window.addEventListener('DOMContentLoaded', () => {
 /* ---------- Admin-Panel ---------- */
 document.getElementById('adminBtn').addEventListener('click', () => {
   renderTechList();
+  document.getElementById('bilderSpeichernToggle').checked = localStorage.getItem('ts_bilder_speichern') === '1';
   adminModal.style.display = 'flex';
 });
+function aktualisiereMedienStatus(){
+  const an = localStorage.getItem('ts_bilder_speichern') === '1';
+  const el = document.getElementById('medienStatus');
+  el.textContent = an
+    ? 'Fotos & Unterschrift werden beim Absenden zentral gespeichert.'
+    : 'Fotos & Unterschrift bleiben nur im lokalen PDF (nicht in der Datenbank).';
+  el.className = 'pdf-status' + (an ? ' ok' : '');
+}
+document.getElementById('bilderSpeichernToggle').addEventListener('change', e => {
+  localStorage.setItem('ts_bilder_speichern', e.target.checked ? '1' : '0');
+  aktualisiereMedienStatus();
+});
+aktualisiereMedienStatus();
 document.getElementById('closeAdmin').addEventListener('click', () => adminModal.style.display = 'none');
 
 function renderTechList(){

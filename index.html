@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Blueprint — TS-Suite</title>
+<style>
+  :root{
+    --bg:#0e1318; --panel:#161d24; --line:#28333d;
+    --blue:#4a90b8; --amber:#e8934a; --text:#e7edf2; --muted:#8394a1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); color:var(--text);
+    font-family:"IBM Plex Sans","Segoe UI",Arial,sans-serif;
+    padding:24px;
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:2px;
+    padding:32px 26px; max-width:420px; width:100%; text-align:center;
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--blue); margin:0 0 10px;
+  }
+  h1{font-size:22px; margin:0 0 10px; font-weight:600;}
+  p{color:var(--muted); font-size:14px; margin:0 0 26px; line-height:1.5;}
+  a.btn{
+    display:block; background:var(--amber); color:#1a1208; text-decoration:none;
+    padding:14px; border-radius:2px; font-weight:600; font-family:"IBM Plex Mono",monospace;
+  }
+  a.btn:hover{background:#f3a361;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <p class="eyebrow">Blueprint · TS-Suite</p>
+    <h1>Arbeitsbericht</h1>
+    <p>Auftrag erfassen, abschließen und als PDF exportieren.</p>
+    <a class="btn" href="arbeitsbericht.html">Arbeitsbericht öffnen →</a>
+  </div>
+</body>
+</html>

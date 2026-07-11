@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Arbeitsbericht — Blueprint</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1318;
+    --panel:#161d24;
+    --panel-2:#1b232b;
+    --line:#28333d;
+    --blue:#4a90b8;
+    --blue-dim:#2e4a5a;
+    --amber:#e8934a;
+    --text:#e7edf2;
+    --muted:#8394a1;
+    --danger:#c9604f;
+    --ok:#5c9e7c;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      linear-gradient(var(--bg),var(--bg)),
+      repeating-linear-gradient(0deg, rgba(74,144,184,0.05) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, rgba(74,144,184,0.05) 0 1px, transparent 1px 28px);
+    color:var(--text);
+    font-family:"IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    padding:0 0 80px 0;
+    min-height:100vh;
+  }
+  @font-face{font-family:'IBM Plex Sans';src:local('Arial');}
+  .mono{font-family:"IBM Plex Mono","Courier New",monospace;}
+
+  header{
+    padding:22px 18px 16px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:5;
+    background:rgba(14,19,24,0.92);
+    backdrop-filter:blur(6px);
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--blue); margin:0 0 6px;
+  }
+  h1{font-size:20px; margin:0; font-weight:600; letter-spacing:-.01em;}
+  .sub{color:var(--muted); font-size:13px; margin-top:4px;}
+
+  main{padding:18px; max-width:640px; margin:0 auto;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    margin-bottom:16px;
+    position:relative;
+    padding:18px 16px 20px;
+  }
+  .card::before, .card::after{
+    content:""; position:absolute; width:9px; height:9px;
+    border:1px solid var(--blue-dim); opacity:.7;
+  }
+  .card::before{top:-1px; left:-1px; border-right:none; border-bottom:none;}
+  .card::after{bottom:-1px; right:-1px; border-left:none; border-top:none;}
+
+  .card-title{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--amber); margin:0 0 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card-title .n{
+    color:var(--muted); font-size:11px;
+  }
+
+  label{
+    display:block; font-size:12px; color:var(--muted); margin:12px 0 5px;
+  }
+  label:first-of-type{margin-top:0;}
+
+  input[type=text], input[type=date], input[type=time], textarea, select{
+    width:100%; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--text); padding:10px 11px; border-radius:var(--radius);
+    font-size:14.5px; font-family:inherit;
+  }
+  input:focus, textarea:focus, select:focus{
+    outline:none; border-color:var(--blue);
+  }
+  textarea{min-height:90px; resize:vertical;}
+
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
+  .pdf-drop{
+    border:1px dashed var(--line); border-radius:var(--radius);
+    padding:16px; text-align:center; cursor:pointer;
+    background:var(--panel-2); color:var(--muted); font-size:13px;
+  }
+  .pdf-drop:hover{border-color:var(--blue);}
+  .pdf-status{font-size:12px; margin-top:8px;}
+  .pdf-status.ok{color:var(--ok);}
+  .pdf-status.err{color:var(--danger);}
+
+  .zeit-row{
+    display:grid; grid-template-columns:1fr 1fr auto; gap:8px;
+    align-items:end; margin-bottom:10px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  .zeit-row:last-of-type{border-bottom:none;}
+  .icon-btn{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    width:38px; height:38px; border-radius:var(--radius); cursor:pointer; font-size:16px;
+  }
+  .icon-btn:hover{border-color:var(--danger); color:var(--danger);}
+
+  .add-btn{
+    background:transparent; border:1px solid var(--blue-dim); color:var(--blue);
+    padding:9px 14px; border-radius:var(--radius); cursor:pointer;
+    font-size:13px; font-family:"IBM Plex Mono",monospace; margin-top:4px;
+  }
+  .add-btn:hover{border-color:var(--blue); background:rgba(74,144,184,0.08);}
+
+  .zeit-total{
+    margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--amber);
+  }
+
+  .photo-actions{display:flex; gap:10px; margin-bottom:12px;}
+  .photo-actions label{
+    margin:0; flex:1; text-align:center; padding:11px 8px;
+    border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--panel-2); color:var(--text); font-size:13px; cursor:pointer;
+  }
+  .photo-actions label:hover{border-color:var(--blue);}
+  .photo-actions input{display:none;}
+  .thumbs{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .thumb{position:relative; aspect-ratio:1; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb .rm{
+    position:absolute; top:3px; right:3px; background:rgba(14,19,24,0.85);
+    color:var(--danger); border:none; width:22px; height:22px; border-radius:50%;
+    cursor:pointer; font-size:13px; line-height:1;
+  }
+
+  canvas#sig{
+    width:100%; height:160px; background:var(--panel-2);
+    border:1px solid var(--line); border-radius:var(--radius); touch-action:none;
+    display:block;
+  }
+  .sig-actions{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .clear-link{background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; text-decoration:underline;}
+  .sig-name{margin-top:10px;}
+
+  .generate{
+    position:sticky; bottom:0; padding:14px 18px 22px;
+    background:linear-gradient(transparent, var(--bg) 30%);
+  }
+  .generate button{
+    width:100%; background:var(--amber); color:#1a1208; border:none;
+    padding:15px; font-size:14.5px; font-weight:600; border-radius:var(--radius);
+    cursor:pointer; font-family:"IBM Plex Mono",monospace; letter-spacing:.02em;
+  }
+  .generate button:hover{background:#f3a361;}
+  .generate button:disabled{background:var(--line); color:var(--muted); cursor:not-allowed;}
+  .gen-status{text-align:center; font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div>
+      <p class="eyebrow">Blueprint · TS-Suite</p>
+      <h1>Arbeitsbericht</h1>
+      <div class="sub">Auftrag erfassen, abschließen, als PDF exportieren</div>
+    </div>
+    <button id="adminBtn" title="Techniker-Verwaltung" style="background:transparent;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:var(--radius);cursor:pointer;font-size:15px;">⚙</button>
+  </div>
+</header>
+
+<!-- Techniker-Auswahl (Ersteinrichtung) -->
+<div id="techModal" style="display:none;position:fixed;inset:0;background:rgba(10,13,16,0.88);z-index:20;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px;max-width:400px;width:100%;">
+    <p class="card-title" style="margin-bottom:10px;">Wer bist du?</p>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Dieses Gerät merkt sich deine Auswahl dauerhaft.</div>
+    <select id="techSelect" style="margin-bottom:14px;"></select>
+    <button class="add-btn" id="techConfirm" style="width:100%;text-align:center;">Bestätigen</button>
+  </div>
+</div>
+
+<!-- Admin: Techniker-Verwaltung -->
+<div id="adminModal" style="display:none;position:fixed;inset:0;background:rgba(10,13,16,0.88);z-index:20;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px;max-width:420px;width:100%;max-height:85vh;overflow:auto;">
+    <p class="card-title" style="margin-bottom:14px;">Techniker-Verwaltung</p>
+    <div id="techList" style="margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <input type="text" id="newTechName" placeholder="Name neuer Techniker" style="flex:1;">
+      <button class="icon-btn" id="addTechBtn" style="width:44px;color:var(--ok);border-color:var(--ok);">+</button>
+    </div>
+    <div style="border-top:1px solid var(--line);padding-top:14px;">
+      <button class="add-btn" id="switchTechBtn" style="width:100%;text-align:center;margin-bottom:8px;">Techniker dieses Geräts ändern</button>
+      <button class="clear-link" id="closeAdmin">schließen</button>
+    </div>
+  </div>
+</div>
+
+<main>
+
+  <div class="card">
+    <p class="card-title"><span class="n">01</span> Auftragsdaten</p>
+
+    <label>Angebots-PDF einlesen (optional — befüllt Felder unten)</label>
+    <div class="pdf-drop" id="pdfDrop">PDF auswählen oder hier ablegen</div>
+    <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
+    <div class="pdf-status" id="pdfStatus"></div>
+
+    <label>Kunde</label>
+    <input type="text" id="fKunde" placeholder="z. B. Stadt Karlsruhe">
+
+    <label>Bauvorhaben</label>
+    <input type="text" id="fBauvorhaben" placeholder="z. B. Karlsburg BA3 BS-Sanierung">
+
+    <div id="lieferanschriftBlock" style="display:none;">
+      <label>Lieferanschrift <span style="color:var(--muted);font-weight:normal;">(abweichend von Kunde)</span></label>
+      <textarea id="fLieferanschrift" placeholder="Abweichende Lieferadresse" style="min-height:60px;"></textarea>
+    </div>
+    <button id="toggleLieferanschrift" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;text-decoration:underline;margin-top:6px;padding:0;">+ abweichende Lieferanschrift</button>
+
+    <div class="row2">
+      <div>
+        <label>Angebots-/Auftragsnr.</label>
+        <input type="text" id="fAngebotsnr" placeholder="i-2026-XXXXX">
+      </div>
+      <div>
+        <label>Datum</label>
+        <input type="date" id="fDatum">
+      </div>
+    </div>
+
+    <label>Techniker</label>
+    <div style="display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 11px;">
+      <span id="fTechniker" class="mono" style="flex:1;color:var(--text);">–</span>
+      <button id="changeTechInline" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;text-decoration:underline;">ändern</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-title"><span class="n">02</span> Zeiterfassung</p>
+    <div id="technikerZeitBlocks"></div>
+    <button class="add-btn" id="addTechnikerBlock">+ Weiterer Techniker auf der Baustelle</button>
+    <div class="zeit-total" id="zeitTotal">Gesamt: 0,0 Std.</div>
+  </div>
+
+  <div class="card">
+    <p class="card-title"><span class="n">03</span> Tätigkeitsbeschreibung</p>
+    <textarea id="fTaetigkeit" placeholder="Was wurde gemacht? z. B. Montage, Reparatur, Störungsursache, durchgeführte Prüfungen ..." style="min-height:120px;"></textarea>
+  </div>
+
+  <div class="card">
+    <p class="card-title"><span class="n">04</span> Materialverbrauch</p>
+
+    <div id="materialSection" style="display:none;">
+      <div style="display:flex;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line);">
+        <input type="checkbox" id="selectAllMaterial" style="width:17px;height:17px;accent-color:var(--amber);">
+        <label for="selectAllMaterial" style="margin:0;color:var(--text);font-size:13px;cursor:pointer;">Alle auswählen</label>
+      </div>
+      <div id="materialChecklist"></div>
+    </div>
+
+    <label style="margin-top:14px;">Sonstiges / Kleinmaterial</label>
+    <textarea id="fMaterial" placeholder="Zusätzliches Material, das nicht im Angebot steht ..."></textarea>
+  </div>
+
+  <div class="card">
+    <p class="card-title"><span class="n">05</span> Fotos</p>
+    <div class="photo-actions">
+      <label>Kamera<input type="file" accept="image/*" capture="environment" id="photoCam"></label>
+      <label>Datei wählen<input type="file" accept="image/*" multiple id="photoFile"></label>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+  </div>
+
+  <div class="card">
+    <p class="card-title"><span class="n">06</span> Kundenunterschrift</p>
+    <canvas id="sig" width="600" height="300"></canvas>
+    <div class="sig-actions">
+      <span style="font-size:12px;color:var(--muted);">Mit Finger oder Maus unterschreiben</span>
+      <button class="clear-link" id="clearSig">löschen</button>
+    </div>
+    <div class="sig-name">
+      <label>Name des Kunden (Druckschrift)</label>
+      <input type="text" id="fKundenname" placeholder="Name in Druckschrift">
+    </div>
+  </div>
+
+</main>
+
+<!-- Zusätzlichen Techniker für Zeiterfassung auswählen -->
+<div id="addTechTimeModal" style="display:none;position:fixed;inset:0;background:rgba(10,13,16,0.88);z-index:20;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px;max-width:400px;width:100%;">
+    <p class="card-title" style="margin-bottom:10px;">Weiterer Techniker</p>
+    <select id="extraTechSelect" style="margin-bottom:14px;"></select>
+    <div style="display:flex;gap:8px;">
+      <button class="add-btn" id="extraTechConfirm" style="flex:1;text-align:center;">Hinzufügen</button>
+      <button class="clear-link" id="extraTechCancel">abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<div class="generate">
+  <button id="genBtn">Bericht als PDF erzeugen</button>
+  <div class="gen-status" id="genStatus"></div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* Setzt pdf.js Textfragmente anhand ihrer Y/X-Position zu echten Zeilen zusammen,
+   statt sie in roher Stream-Reihenfolge aneinanderzuhängen (die nicht der visuellen
+   Zeilenordnung entspricht, besonders bei mehrspaltigen Layouts). */
+function reconstructLines(content){
+  const lines = [];
+  content.items.forEach(item => {
+    if(!item.str || !item.str.trim()) return;
+    const y = item.transform[5];
+    const x = item.transform[4];
+    let line = lines.find(l => Math.abs(l.y - y) < 2.5);
+    if(!line){ line = {y, parts: []}; lines.push(line); }
+    line.parts.push({x, str: item.str});
+  });
+  lines.sort((a, b) => b.y - a.y);
+  return lines.map(line => {
+    line.parts.sort((a, b) => a.x - b.x);
+    let out = '';
+    let lastEndX = null;
+    line.parts.forEach(p => {
+      if(lastEndX !== null && p.x - lastEndX > 3 && !out.endsWith(' ') && !p.str.startsWith(' ')){
+        out += ' ';
+      }
+      out += p.str;
+      lastEndX = p.x + (p.str.length * 4); // grobe Schätzung der Textbreite
+    });
+    return out.replace(/\s+/g, ' ').trim();
+  }).join('\n');
+}
+
+/* ---------- PDF Datenextraktion ---------- */
+const pdfDrop = document.getElementById('pdfDrop');
+const pdfInput = document.getElementById('pdfInput');
+const pdfStatus = document.getElementById('pdfStatus');
+
+pdfDrop.addEventListener('click', () => pdfInput.click());
+pdfInput.addEventListener('change', e => { if(e.target.files[0]) handlePdf(e.target.files[0]); });
+pdfDrop.addEventListener('dragover', e => { e.preventDefault(); pdfDrop.style.borderColor='var(--blue)'; });
+pdfDrop.addEventListener('dragleave', () => { pdfDrop.style.borderColor='var(--line)'; });
+pdfDrop.addEventListener('drop', e => {
+  e.preventDefault(); pdfDrop.style.borderColor='var(--line)';
+  if(e.dataTransfer.files[0]) handlePdf(e.dataTransfer.files[0]);
+});
+
+async function handlePdf(file){
+  pdfStatus.textContent = 'Lese PDF ...';
+  pdfStatus.className = 'pdf-status';
+
+  /* Alte Werte zurücksetzen, damit Reste von einem vorherigen Versuch nicht stehen bleiben */
+  ['fKunde','fBauvorhaben','fAngebotsnr','fLieferanschrift'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.getElementById('lieferanschriftBlock').style.display = 'none';
+  document.getElementById('toggleLieferanschrift').textContent = '+ abweichende Lieferanschrift';
+
+  try{
+    const buf = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({data: buf});
+    const doc = await loadingTask.promise;
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const text = reconstructLines(content);
+
+    if(!text || text.trim().length < 5){
+      pdfStatus.textContent = 'PDF enthält keinen auslesbaren Text (evtl. gescanntes Bild ohne Textebene). Bitte manuell eintragen.';
+      pdfStatus.className = 'pdf-status err';
+      return;
+    }
+
+    let kunde = null, bauvorhaben = null, angebotsnr = null, datum = null, summe = null, docType = null, lieferMatch = null;
+
+    if(/Auftragsbestätigung/.test(text)){
+      /* --- Typ: Auftragsbestätigung --- */
+      docType = 'Auftragsbestätigung';
+      const belegMatch = text.match(/Belegnummer:\s*(VA[NT]\d+)/) || text.match(/\bVA[NT]\d{5,9}\b/);
+      const referenzMatch = text.match(/Ihre Referenz\s*:\s*([^\n]+)/);
+      const datumMatch = text.match(/Auftragsdatum:\s*(\d{2}\.\d{2}\.\d{4})/);
+      const summeMatch = text.match(/Auftragssumme EUR:\s*([\d.,]+)/);
+      const kundeMatch = text.match(/\*VA[NT]\d+\*\s*\n([\s\S]*?)\nKundennummer:/);
+      lieferMatch = text.match(/Lieferanschrift:\s*([\s\S]*?)\nArtikelnr\./);
+
+      if(belegMatch) angebotsnr = belegMatch[1] || belegMatch[0];
+      if(referenzMatch) bauvorhaben = referenzMatch[1].trim();
+      if(datumMatch) datum = datumMatch[1];
+      if(summeMatch) summe = summeMatch[1];
+      if(kundeMatch){
+        kunde = kundeMatch[1].split('\n')
+          .map(l => l.replace(/(Belegnummer:.*|Auftragsdatum:.*|Voraussichtl\..*|Lieferdatum:.*)/g, '').trim())
+          .filter(Boolean).join(', ');
+      }
+      if(lieferMatch){
+        const lieferAdresse = lieferMatch[1].split('\n').map(l => l.trim()).filter(Boolean).join(', ');
+        document.getElementById('fLieferanschrift').value = lieferAdresse;
+        document.getElementById('lieferanschriftBlock').style.display = 'block';
+        document.getElementById('toggleLieferanschrift').textContent = '– Lieferanschrift ausblenden';
+      }
+    } else if(/Angebot\s+i-/.test(text)){
+      /* --- Typ: Angebot --- */
+      docType = 'Angebot';
+      const angebotsnrMatch = text.match(/Angebot\s+([a-zA-Z0-9\-]+)/);
+      const bauvorhabenMatch = text.match(/Bauvorhaben:?\s*\n?(.+)/);
+      const kundeMatch = matchLine(text, /^(Stadt .+|Firma .+|Gemeinde .+)$/m);
+
+      if(angebotsnrMatch) angebotsnr = angebotsnrMatch[1];
+      if(bauvorhabenMatch) bauvorhaben = cleanLine(bauvorhabenMatch[1]);
+      if(kundeMatch) kunde = cleanLine(kundeMatch).replace(/\s*Ansprechpartner\s*$/, '').trim();
+    }
+
+    /* Absicherung: offensichtlich falsch erkannte Werte (z.B. nur ein Datum) verwerfen */
+    const looksLikeDate = v => v && /^\d{2}\.\d{2}\.\d{4}$/.test(v.trim());
+    if(looksLikeDate(kunde)) kunde = null;
+    if(looksLikeDate(bauvorhaben)) bauvorhaben = null;
+
+    let filled = [];
+    if(angebotsnr){ document.getElementById('fAngebotsnr').value = angebotsnr.trim(); filled.push('Auftragsnr.'); }
+    if(bauvorhaben){ document.getElementById('fBauvorhaben').value = bauvorhaben; filled.push('Bauvorhaben/Referenz'); }
+    if(kunde){ document.getElementById('fKunde').value = kunde; filled.push('Kunde'); }
+    if(datum){
+      const [d,m,y] = datum.split('.');
+      document.getElementById('fDatum').value = `${y}-${m}-${d}`;
+      filled.push('Datum');
+    }
+
+    if(lieferMatch) filled.push('Lieferanschrift');
+
+    if(filled.length){
+      const typeLabel = docType ? `(${docType}) ` : '';
+      const summeInfo = summe ? ` · Auftragssumme: ${summe} €` : '';
+      pdfStatus.textContent = typeLabel + 'Übernommen: ' + filled.join(', ') + summeInfo + ' — bitte prüfen.';
+      pdfStatus.className = 'pdf-status ok';
+    } else {
+      pdfStatus.textContent = 'PDF gelesen, aber keine bekannten Felder gefunden (unbekanntes Format). Bitte manuell eintragen.';
+      pdfStatus.className = 'pdf-status err';
+    }
+
+    /* Artikel-/Materialliste extrahieren */
+    const items = extractMaterialListFromPdf(text, docType);
+    if(items.length) setMaterialItems(items);
+
+  } catch(err){
+    console.error('PDF-Parse-Fehler:', err);
+    const detail = (err && err.message) ? err.message : String(err);
+    pdfStatus.textContent = 'PDF konnte nicht gelesen werden (' + detail + '). Bitte erneut versuchen oder manuell eintragen.';
+    pdfStatus.className = 'pdf-status err';
+  }
+}
+
+/* ---------- Artikelliste aus PDF extrahieren ---------- */
+function extractMaterialListFromPdf(text, docType){
+  const items = [];
+
+  if(docType === 'Auftragsbestätigung'){
+    const re = /^(\d{1,3})\s+(?:\(\*\)\s*)?(\d{5,8})\s+(.+?)\s+[A-Z]?\s*(\d+,\d{3})\s*[A-Z]{2,4}\b/gm;
+    let m;
+    while((m = re.exec(text)) !== null){
+      const [, pos, artikelnr, beschreibung, menge] = m;
+      items.push(`Pos. ${pos}: ${menge.replace(',000','')}× ${beschreibung.trim()} (Art. ${artikelnr})`);
+    }
+  } else if(docType === 'Angebot'){
+    const blocks = text.split(/(?=Pos\.:\s*\d+)/g);
+    blocks.forEach(block => {
+      const posMatch = block.match(/Pos\.:\s*(\d+)\s*\n+([^\n]+)/);
+      const posLabel = posMatch ? `Pos. ${posMatch[1]}` : null;
+      if(posMatch) items.push(`${posLabel}: ${posMatch[2].trim()}`);
+
+      const compRe = /^([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß0-9\- ]{1,40}) \(E11\)\s*:\s*([^\n]+)$/gm;
+      let cm;
+      while((cm = compRe.exec(block)) !== null){
+        const [, label, value] = cm;
+        const prefix = posLabel ? `${posLabel} – ` : '';
+        items.push(`${prefix}${label.trim()}: ${value.trim()}`);
+      }
+    });
+  }
+  /* Duplikate entfernen, Reihenfolge erhalten */
+  return [...new Set(items)];
+}
+
+/* ---------- Material-Checkliste ---------- */
+let materialItems = [];
+function setMaterialItems(items){
+  materialItems = items.map((label, i) => ({id: 'mat_' + i, label, checked: true}));
+  renderMaterialChecklist();
+}
+function renderMaterialChecklist(){
+  const section = document.getElementById('materialSection');
+  const listEl = document.getElementById('materialChecklist');
+  if(!materialItems.length){ section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  listEl.innerHTML = materialItems.map(item => `
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;">
+      <input type="checkbox" class="matCheck" data-id="${item.id}" ${item.checked ? 'checked' : ''}
+        style="width:17px;height:17px;margin-top:2px;accent-color:var(--amber);flex-shrink:0;">
+      <label style="margin:0;font-size:13.5px;color:var(--text);cursor:pointer;line-height:1.4;">${item.label}</label>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.matCheck').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const it = materialItems.find(x => x.id === cb.dataset.id);
+      if(it) it.checked = cb.checked;
+      updateSelectAllState();
+    });
+  });
+  updateSelectAllState();
+}
+function updateSelectAllState(){
+  const all = document.getElementById('selectAllMaterial');
+  all.checked = materialItems.length > 0 && materialItems.every(i => i.checked);
+}
+document.getElementById('selectAllMaterial').addEventListener('change', e => {
+  materialItems.forEach(i => i.checked = e.target.checked);
+  renderMaterialChecklist();
+});
+function matchAfter(text, re){ const m = text.match(re); return m ? m[1] : null; }
+function matchLine(text, re){ const m = text.match(re); return m ? m[1] : null; }
+function cleanLine(s){ return s.split('\n')[0].replace(/,+\s*$/,'').trim(); }
+
+/* ---------- Zeiterfassung ---------- */
+/* ---------- Zeiterfassung: mehrere Techniker ---------- */
+const technikerZeitBlocks = document.getElementById('technikerZeitBlocks');
+const zeitTotal = document.getElementById('zeitTotal');
+let zeitBlocks = []; // [{id, name, rows:[{von,bis}], primary:bool}]
+let zeitBlockSeq = 0;
+let zeitRowSeq = 0;
+
+function initZeitBlocks(primaryName){
+  zeitBlocks = [{ id: zeitBlockSeq++, name: primaryName, primary: true, rows: [{id: zeitRowSeq++, von:'', bis:''}] }];
+  renderZeitBlocks();
+}
+
+function renderZeitBlocks(){
+  technikerZeitBlocks.innerHTML = zeitBlocks.map(block => `
+    <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="mono" style="font-size:12px;color:var(--amber);">${block.name}${block.primary ? ' (Gerät)' : ''}</span>
+        ${block.primary ? '' : `<button class="clear-link rmBlock" data-block="${block.id}">entfernen</button>`}
+      </div>
+      <div class="rowsFor" data-block="${block.id}">
+        ${block.rows.map(r => `
+          <div class="zeit-row" data-row="${r.id}" data-block="${block.id}">
+            <div><label>Von</label><input type="time" step="900" class="zVon" value="${r.von}"></div>
+            <div><label>Bis</label><input type="time" step="900" class="zBis" value="${r.bis}"></div>
+            <button class="icon-btn zRemove" data-row="${r.id}" data-block="${block.id}" title="entfernen">×</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="add-btn addRow" data-block="${block.id}" style="margin-top:4px;">+ Zeitraum</button>
+    </div>
+  `).join('');
+
+  technikerZeitBlocks.querySelectorAll('.zVon, .zBis').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const row = e.target.closest('.zeit-row');
+      const blockId = parseInt(row.dataset.block), rowId = parseInt(row.dataset.row);
+      const block = zeitBlocks.find(b => b.id === blockId);
+      const r = block.rows.find(x => x.id === rowId);
+      r.von = row.querySelector('.zVon').value;
+      r.bis = row.querySelector('.zBis').value;
+      updateTotal();
+    });
+  });
+  technikerZeitBlocks.querySelectorAll('.zRemove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const blockId = parseInt(btn.dataset.block), rowId = parseInt(btn.dataset.row);
+      const block = zeitBlocks.find(b => b.id === blockId);
+      block.rows = block.rows.filter(r => r.id !== rowId);
+      if(block.rows.length === 0) block.rows.push({id: zeitRowSeq++, von:'', bis:''});
+      renderZeitBlocks();
+      updateTotal();
+    });
+  });
+  technikerZeitBlocks.querySelectorAll('.addRow').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const block = zeitBlocks.find(b => b.id === parseInt(btn.dataset.block));
+      block.rows.push({id: zeitRowSeq++, von:'', bis:''});
+      renderZeitBlocks();
+    });
+  });
+  technikerZeitBlocks.querySelectorAll('.rmBlock').forEach(btn => {
+    btn.addEventListener('click', () => {
+      zeitBlocks = zeitBlocks.filter(b => b.id !== parseInt(btn.dataset.block));
+      renderZeitBlocks();
+      updateTotal();
+    });
+  });
+  updateTotal();
+}
+
+function minutesOf(rows){
+  let mins = 0;
+  rows.forEach(r => {
+    if(r.von && r.bis){
+      const [vh,vm] = r.von.split(':').map(Number);
+      const [bh,bm] = r.bis.split(':').map(Number);
+      const diff = (bh*60+bm) - (vh*60+vm);
+      if(diff > 0) mins += diff;
+    }
+  });
+  return mins;
+}
+function updateTotal(){
+  const total = zeitBlocks.reduce((sum, b) => sum + minutesOf(b.rows), 0);
+  zeitTotal.textContent = 'Gesamt: ' + (total/60).toFixed(1).replace('.',',') + ' Std.';
+}
+
+document.getElementById('addTechnikerBlock').addEventListener('click', () => {
+  const used = zeitBlocks.map(b => b.name);
+  const available = getTechListe().filter(t => !used.includes(t));
+  const sel = document.getElementById('extraTechSelect');
+  if(!available.length){
+    sel.innerHTML = '<option disabled>Alle Techniker bereits hinzugefügt</option>';
+  } else {
+    sel.innerHTML = available.map(t => `<option value="${t}">${t}</option>`).join('');
+  }
+  document.getElementById('addTechTimeModal').style.display = 'flex';
+});
+document.getElementById('extraTechCancel').addEventListener('click', () => {
+  document.getElementById('addTechTimeModal').style.display = 'none';
+});
+document.getElementById('extraTechConfirm').addEventListener('click', () => {
+  const sel = document.getElementById('extraTechSelect');
+  if(sel.value){
+    zeitBlocks.push({ id: zeitBlockSeq++, name: sel.value, primary: false, rows: [{id: zeitRowSeq++, von:'', bis:''}] });
+    renderZeitBlocks();
+  }
+  document.getElementById('addTechTimeModal').style.display = 'none';
+});
+
+/* ---------- Fotos ---------- */
+const thumbs = document.getElementById('thumbs');
+let photos = [];
+
+function addPhotos(fileList){
+  Array.from(fileList).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const id = Date.now() + Math.random();
+      photos.push({id, dataUrl: e.target.result});
+      renderThumbs();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function renderThumbs(){
+  thumbs.innerHTML = '';
+  photos.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="${p.dataUrl}"><button class="rm">×</button>`;
+    div.querySelector('.rm').addEventListener('click', () => {
+      photos = photos.filter(x => x.id !== p.id);
+      renderThumbs();
+    });
+    thumbs.appendChild(div);
+  });
+}
+document.getElementById('photoCam').addEventListener('change', e => addPhotos(e.target.files));
+document.getElementById('photoFile').addEventListener('change', e => addPhotos(e.target.files));
+
+/* ---------- Unterschrift ---------- */
+const canvas = document.getElementById('sig');
+const ctx = canvas.getContext('2d');
+ctx.strokeStyle = '#e7edf2';
+ctx.lineWidth = 2.2;
+ctx.lineCap = 'round';
+let drawing = false, hasSig = false;
+
+function getPos(e){
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {x:(clientX-rect.left)*scaleX, y:(clientY-rect.top)*scaleY};
+}
+function start(e){ drawing = true; hasSig = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+function move(e){ if(!drawing) return; const p = getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+function end(){ drawing = false; }
+
+canvas.addEventListener('mousedown', start);
+canvas.addEventListener('mousemove', move);
+window.addEventListener('mouseup', end);
+canvas.addEventListener('touchstart', start, {passive:false});
+canvas.addEventListener('touchmove', move, {passive:false});
+canvas.addEventListener('touchend', end);
+
+document.getElementById('clearSig').addEventListener('click', () => {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  hasSig = false;
+});
+
+/* ---------- PDF Bericht generieren ---------- */
+document.getElementById('genBtn').addEventListener('click', generateReport);
+
+async function generateReport(){
+  const genStatus = document.getElementById('genStatus');
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  genStatus.textContent = 'Bericht wird erstellt ...';
+
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const pageW = 210, margin = 16;
+    let y = 20;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('Arbeitsbericht', margin, y); y += 10;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const fields = [
+      ['Kunde', val('fKunde')],
+      ['Bauvorhaben', val('fBauvorhaben')],
+      ['Angebots-/Auftragsnr.', val('fAngebotsnr')],
+      ['Datum', val('fDatum')],
+      ['Techniker', val('fTechniker')],
+    ];
+    fields.forEach(([label, value]) => {
+      doc.setFont('helvetica','bold'); doc.text(label + ':', margin, y);
+      doc.setFont('helvetica','normal'); doc.text(value || '-', margin + 55, y);
+      y += 6.5;
+    });
+    const lieferwert = val('fLieferanschrift');
+    if(lieferwert){
+      doc.setFont('helvetica','bold'); doc.text('Lieferanschrift:', margin, y);
+      doc.setFont('helvetica','normal');
+      const liefLines = doc.splitTextToSize(lieferwert, pageW - margin - 55 - margin);
+      doc.text(liefLines, margin + 55, y);
+      y += Math.max(6.5, liefLines.length * 5);
+    }
+
+    y += 4;
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Zeiterfassung', margin, y); y += 7;
+    doc.setFontSize(10);
+    let mins = 0;
+    zeitBlocks.forEach(block => {
+      doc.setFont('helvetica','bold');
+      doc.text(block.name + (block.primary ? ' (Gerät)' : ''), margin, y); y += 5.5;
+      doc.setFont('helvetica','normal');
+      block.rows.forEach(r => {
+        if(r.von || r.bis){
+          doc.text(`  ${r.von || '--:--'}  bis  ${r.bis || '--:--'}`, margin, y);
+          y += 5.5;
+        }
+      });
+      const blockMins = minutesOf(block.rows);
+      mins += blockMins;
+      doc.setFont('helvetica','italic');
+      doc.text(`  Zwischensumme: ${(blockMins/60).toFixed(1).replace('.',',')} Std.`, margin, y);
+      y += 7;
+    });
+    doc.setFont('helvetica','bold');
+    doc.text('Gesamt: ' + (mins/60).toFixed(1).replace('.',',') + ' Std.', margin, y);
+    y += 10;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Tätigkeitsbeschreibung', margin, y); y += 7;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const taetigkeit = val('fTaetigkeit') || '-';
+    const taetLines = doc.splitTextToSize(taetigkeit, pageW - margin*2);
+    doc.text(taetLines, margin, y);
+    y += taetLines.length * 5 + 8;
+
+    if(y > 240){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Materialverbrauch', margin, y); y += 7;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+
+    const checkedItems = materialItems.filter(i => i.checked).map(i => '• ' + i.label);
+    const material = val('fMaterial');
+    const materialBlocks = [...checkedItems];
+    if(material) materialBlocks.push(...material.split('\n').filter(Boolean));
+    const materialText = materialBlocks.length ? materialBlocks.join('\n') : '-';
+
+    const matLines = doc.splitTextToSize(materialText, pageW - margin*2);
+    doc.text(matLines, margin, y);
+    y += matLines.length * 5 + 8;
+
+    if(photos.length){
+      if(y > 230){ doc.addPage(); y = 20; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text('Fotos', margin, y); y += 7;
+      let x = margin;
+      const imgW = 55, imgH = 55, gap = 6;
+      for(const p of photos){
+        if(x + imgW > pageW - margin){ x = margin; y += imgH + gap; }
+        if(y + imgH > 280){ doc.addPage(); y = 20; x = margin; }
+        try{ doc.addImage(p.dataUrl, 'JPEG', x, y, imgW, imgH); }catch(e){}
+        x += imgW + gap;
+      }
+      y += imgH + 12;
+    }
+
+    if(y > 230){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Kundenunterschrift', margin, y); y += 4;
+    if(hasSig){
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, 90, 40);
+    } else {
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.text('(keine Unterschrift erfasst)', margin, y + 10);
+    }
+    y += 44;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text(val('fKundenname') || '-', margin, y);
+    doc.setDrawColor(180); doc.line(margin, y-1, margin+90, y-1);
+
+    const filename = `Arbeitsbericht_${(val('fAngebotsnr')||'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}.pdf`;
+    doc.save(filename);
+    genStatus.textContent = 'Bericht erstellt: ' + filename;
+  } catch(err){
+    genStatus.textContent = 'Fehler beim Erstellen des Berichts.';
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+function val(id){
+  const el = document.getElementById(id);
+  if(!el) return '';
+  return el.tagName === 'SPAN' ? el.textContent : el.value;
+}
+
+/* Datum vorbelegen */
+document.getElementById('fDatum').valueAsDate = new Date();
+
+/* ---------- Lieferanschrift Toggle ---------- */
+document.getElementById('toggleLieferanschrift').addEventListener('click', () => {
+  const block = document.getElementById('lieferanschriftBlock');
+  const btn = document.getElementById('toggleLieferanschrift');
+  const show = block.style.display === 'none';
+  block.style.display = show ? 'block' : 'none';
+  btn.textContent = show ? '– Lieferanschrift ausblenden' : '+ abweichende Lieferanschrift';
+});
+
+/* ---------- Techniker-Verwaltung ---------- */
+const LS_LISTE = 'ts_techniker_liste';
+const LS_AKTUELL = 'ts_techniker_aktuell';
+const DEFAULT_TECHNIKER = ['Marko', 'Techniker 2', 'Techniker 3'];
+
+function getTechListe(){
+  const raw = localStorage.getItem(LS_LISTE);
+  return raw ? JSON.parse(raw) : DEFAULT_TECHNIKER.slice();
+}
+function saveTechListe(list){ localStorage.setItem(LS_LISTE, JSON.stringify(list)); }
+function getAktuellerTech(){ return localStorage.getItem(LS_AKTUELL) || ''; }
+function setAktuellerTech(name){
+  localStorage.setItem(LS_AKTUELL, name);
+  document.getElementById('fTechniker').textContent = name;
+  const primary = zeitBlocks.find(b => b.primary);
+  if(primary){ primary.name = name; renderZeitBlocks(); }
+  else { initZeitBlocks(name); }
+}
+
+const techModal = document.getElementById('techModal');
+const adminModal = document.getElementById('adminModal');
+
+function openTechModal(){
+  const sel = document.getElementById('techSelect');
+  sel.innerHTML = getTechListe().map(t => `<option value="${t}">${t}</option>`).join('');
+  techModal.style.display = 'flex';
+}
+document.getElementById('techConfirm').addEventListener('click', () => {
+  const sel = document.getElementById('techSelect');
+  if(sel.value){ setAktuellerTech(sel.value); techModal.style.display = 'none'; }
+});
+document.getElementById('changeTechInline').addEventListener('click', openTechModal);
+document.getElementById('switchTechBtn').addEventListener('click', () => {
+  adminModal.style.display = 'none';
+  openTechModal();
+});
+
+/* Ersteinrichtung: Gerät kennt noch keinen Techniker */
+window.addEventListener('DOMContentLoaded', () => {
+  const current = getAktuellerTech();
+  if(current){
+    document.getElementById('fTechniker').textContent = current;
+    initZeitBlocks(current);
+  } else {
+    openTechModal();
+  }
+});
+
+/* ---------- Admin-Panel ---------- */
+document.getElementById('adminBtn').addEventListener('click', () => {
+  renderTechList();
+  adminModal.style.display = 'flex';
+});
+document.getElementById('closeAdmin').addEventListener('click', () => adminModal.style.display = 'none');
+
+function renderTechList(){
+  const listEl = document.getElementById('techList');
+  const listArr = getTechListe();
+  listEl.innerHTML = listArr.map((name, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
+      <span>${name}</span>
+      <button class="icon-btn rmTech" data-i="${i}" style="width:30px;height:30px;font-size:14px;">×</button>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.rmTech').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.i);
+      const arr = getTechListe();
+      arr.splice(i, 1);
+      saveTechListe(arr);
+      renderTechList();
+    });
+  });
+}
+document.getElementById('addTechBtn').addEventListener('click', () => {
+  const input = document.getElementById('newTechName');
+  const name = input.value.trim();
+  if(!name) return;
+  const arr = getTechListe();
+  if(!arr.includes(name)){ arr.push(name); saveTechListe(arr); }
+  input.value = '';
+  renderTechList();
+});
+</script>
+</body>
+</html>

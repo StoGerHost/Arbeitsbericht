@@ -229,6 +229,18 @@
     </div>
     <button id="toggleLieferanschrift" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;text-decoration:underline;margin-top:6px;padding:0;">+ abweichende Lieferanschrift</button>
 
+    <div class="row2" style="margin-top:14px;">
+      <div>
+        <label>Ansprechpartner vor Ort</label>
+        <input type="text" id="fAnsprechpartner" placeholder="Name">
+      </div>
+      <div>
+        <label>Telefonnummer</label>
+        <input type="tel" id="fTelefon" placeholder="0721 ...">
+      </div>
+    </div>
+    <div class="pdf-status" id="kontaktStatus"></div>
+
     <div class="row2">
       <div>
         <label>Angebots-/Auftragsnr.</label>
@@ -257,6 +269,18 @@
   <div class="card">
     <p class="card-title"><span class="n">03</span> Tätigkeitsbeschreibung</p>
     <textarea id="fTaetigkeit" placeholder="Was wurde gemacht? z. B. Montage, Reparatur, Störungsursache, durchgeführte Prüfungen ..." style="min-height:120px;"></textarea>
+
+    <label style="margin-top:14px;">Status</label>
+    <div style="display:flex; gap:18px; margin-top:4px;">
+      <label style="display:flex; align-items:center; gap:8px; margin:0; color:var(--text); font-size:14px; cursor:pointer;">
+        <input type="radio" name="arbeitsstatus" id="statusBeendet" value="beendet" checked style="width:17px;height:17px;accent-color:var(--amber);">
+        Arbeiten beendet
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; margin:0; color:var(--text); font-size:14px; cursor:pointer;">
+        <input type="radio" name="arbeitsstatus" id="statusFortgesetzt" value="fortgesetzt" style="width:17px;height:17px;accent-color:var(--amber);">
+        Wird fortgesetzt
+      </label>
+    </div>
   </div>
 
   <div class="card">
@@ -285,14 +309,24 @@
 
   <div class="card">
     <p class="card-title"><span class="n">06</span> Kundenunterschrift</p>
-    <canvas id="sig" width="600" height="300"></canvas>
-    <div class="sig-actions">
-      <span style="font-size:12px;color:var(--muted);">Mit Finger oder Maus unterschreiben</span>
-      <button class="clear-link" id="clearSig">löschen</button>
-    </div>
-    <div class="sig-name">
-      <label>Name des Kunden (Druckschrift)</label>
-      <input type="text" id="fKundenname" placeholder="Name in Druckschrift">
+
+    <label style="display:flex; align-items:center; gap:8px; margin:0 0 14px; color:var(--text); font-size:14px; cursor:pointer;">
+      <input type="checkbox" id="keinAbnehmer" style="width:17px;height:17px;accent-color:var(--amber);">
+      Unterschriftsberechtigter nicht vor Ort
+    </label>
+
+    <div id="signatureSection">
+      <canvas id="sig" width="600" height="300"></canvas>
+      <div class="sig-actions">
+        <span style="font-size:12px;color:var(--muted);">Mit Finger oder Maus unterschreiben</span>
+        <button class="clear-link" id="clearSig">löschen</button>
+      </div>
+      <div class="sig-name">
+        <label>Name des Kunden (Druckschrift)</label>
+        <input type="text" id="fKundenname" placeholder="Name in Druckschrift">
+      </div>
+      <label style="margin-top:12px;">Funktion des Abnehmers</label>
+      <input type="text" id="fAbnehmerFunktion" placeholder="z. B. Hausmeister, Objektleiter">
     </div>
   </div>
 
@@ -317,6 +351,16 @@
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* Harmlose pdf.js-Konsolenmeldung zur Fake-Worker-Initialisierung ausblenden,
+   ohne andere Warnungen/Fehler zu unterdrücken. */
+(function(){
+  const originalWarn = console.warn;
+  console.warn = function(...args){
+    if(args.some(a => typeof a === 'string' && a.includes('fake worker'))) return;
+    originalWarn.apply(console, args);
+  };
+})();
 
 /* Setzt pdf.js Textfragmente anhand ihrer Y/X-Position zu echten Zeilen zusammen,
    statt sie in roher Stream-Reihenfolge aneinanderzuhängen (die nicht der visuellen
@@ -535,16 +579,21 @@ function matchAfter(text, re){ const m = text.match(re); return m ? m[1] : null;
 function matchLine(text, re){ const m = text.match(re); return m ? m[1] : null; }
 function cleanLine(s){ return s.split('\n')[0].replace(/,+\s*$/,'').trim(); }
 
-/* ---------- Zeiterfassung ---------- */
 /* ---------- Zeiterfassung: mehrere Techniker ---------- */
 const technikerZeitBlocks = document.getElementById('technikerZeitBlocks');
 const zeitTotal = document.getElementById('zeitTotal');
-let zeitBlocks = []; // [{id, name, rows:[{von,bis}], primary:bool}]
+let zeitBlocks = []; // [{id, name, primary, wegepauschale, rows:[{id, datum, stunden}]}]
 let zeitBlockSeq = 0;
 let zeitRowSeq = 0;
 
+function heutigesDatum(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
 function initZeitBlocks(primaryName){
-  zeitBlocks = [{ id: zeitBlockSeq++, name: primaryName, primary: true, rows: [{id: zeitRowSeq++, von:'', bis:''}] }];
+  zeitBlocks = [{ id: zeitBlockSeq++, name: primaryName, primary: true,
+    rows: [{id: zeitRowSeq++, datum: heutigesDatum(), stunden: '', wegepauschale: false}] }];
   renderZeitBlocks();
 }
 
@@ -557,26 +606,40 @@ function renderZeitBlocks(){
       </div>
       <div class="rowsFor" data-block="${block.id}">
         ${block.rows.map(r => `
-          <div class="zeit-row" data-row="${r.id}" data-block="${block.id}">
-            <div><label>Von</label><input type="time" step="900" class="zVon" value="${r.von}"></div>
-            <div><label>Bis</label><input type="time" step="900" class="zBis" value="${r.bis}"></div>
-            <button class="icon-btn zRemove" data-row="${r.id}" data-block="${block.id}" title="entfernen">×</button>
+          <div data-row="${r.id}" data-block="${block.id}" style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);">
+            <div class="zeit-row" style="border:none;padding:0;margin:0;">
+              <div><label>Datum</label><input type="date" class="zDatum" value="${r.datum}"></div>
+              <div><label>Stunden</label><input type="number" step="0.25" min="0" inputmode="decimal" class="zStunden" placeholder="0,50" value="${r.stunden}"></div>
+              <button class="icon-btn zRemove" data-row="${r.id}" data-block="${block.id}" title="entfernen">×</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+              <input type="checkbox" class="zWege" data-row="${r.id}" data-block="${block.id}" id="wege_${block.id}_${r.id}" ${r.wegepauschale ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--amber);">
+              <label for="wege_${block.id}_${r.id}" style="margin:0; color:var(--muted); font-size:13px; cursor:pointer;">Wegepauschale für diesen Tag</label>
+            </div>
           </div>
         `).join('')}
       </div>
-      <button class="add-btn addRow" data-block="${block.id}" style="margin-top:4px;">+ Zeitraum</button>
+      <button class="add-btn addRow" data-block="${block.id}" style="margin-top:4px;">+ Tag hinzufügen</button>
     </div>
   `).join('');
 
-  technikerZeitBlocks.querySelectorAll('.zVon, .zBis').forEach(inp => {
+  technikerZeitBlocks.querySelectorAll('.zDatum, .zStunden').forEach(inp => {
     inp.addEventListener('change', e => {
-      const row = e.target.closest('.zeit-row');
+      const row = e.target.closest('[data-row]');
       const blockId = parseInt(row.dataset.block), rowId = parseInt(row.dataset.row);
       const block = zeitBlocks.find(b => b.id === blockId);
       const r = block.rows.find(x => x.id === rowId);
-      r.von = row.querySelector('.zVon').value;
-      r.bis = row.querySelector('.zBis').value;
+      r.datum = row.querySelector('.zDatum').value;
+      r.stunden = row.querySelector('.zStunden').value;
       updateTotal();
+    });
+  });
+  technikerZeitBlocks.querySelectorAll('.zWege').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const blockId = parseInt(e.target.dataset.block), rowId = parseInt(e.target.dataset.row);
+      const block = zeitBlocks.find(b => b.id === blockId);
+      const r = block.rows.find(x => x.id === rowId);
+      r.wegepauschale = e.target.checked;
     });
   });
   technikerZeitBlocks.querySelectorAll('.zRemove').forEach(btn => {
@@ -584,7 +647,7 @@ function renderZeitBlocks(){
       const blockId = parseInt(btn.dataset.block), rowId = parseInt(btn.dataset.row);
       const block = zeitBlocks.find(b => b.id === blockId);
       block.rows = block.rows.filter(r => r.id !== rowId);
-      if(block.rows.length === 0) block.rows.push({id: zeitRowSeq++, von:'', bis:''});
+      if(block.rows.length === 0) block.rows.push({id: zeitRowSeq++, datum: heutigesDatum(), stunden: '', wegepauschale: false});
       renderZeitBlocks();
       updateTotal();
     });
@@ -592,7 +655,7 @@ function renderZeitBlocks(){
   technikerZeitBlocks.querySelectorAll('.addRow').forEach(btn => {
     btn.addEventListener('click', () => {
       const block = zeitBlocks.find(b => b.id === parseInt(btn.dataset.block));
-      block.rows.push({id: zeitRowSeq++, von:'', bis:''});
+      block.rows.push({id: zeitRowSeq++, datum: heutigesDatum(), stunden: '', wegepauschale: false});
       renderZeitBlocks();
     });
   });
@@ -606,21 +669,12 @@ function renderZeitBlocks(){
   updateTotal();
 }
 
-function minutesOf(rows){
-  let mins = 0;
-  rows.forEach(r => {
-    if(r.von && r.bis){
-      const [vh,vm] = r.von.split(':').map(Number);
-      const [bh,bm] = r.bis.split(':').map(Number);
-      const diff = (bh*60+bm) - (vh*60+vm);
-      if(diff > 0) mins += diff;
-    }
-  });
-  return mins;
+function stundenOf(rows){
+  return rows.reduce((sum, r) => sum + (parseFloat((r.stunden||'').toString().replace(',','.')) || 0), 0);
 }
 function updateTotal(){
-  const total = zeitBlocks.reduce((sum, b) => sum + minutesOf(b.rows), 0);
-  zeitTotal.textContent = 'Gesamt: ' + (total/60).toFixed(1).replace('.',',') + ' Std.';
+  const total = zeitBlocks.reduce((sum, b) => sum + stundenOf(b.rows), 0);
+  zeitTotal.textContent = 'Gesamt: ' + total.toFixed(2).replace('.',',').replace(/,?0+$/,'').replace(/,$/,'') + ' Std.';
 }
 
 document.getElementById('addTechnikerBlock').addEventListener('click', () => {
@@ -640,7 +694,8 @@ document.getElementById('extraTechCancel').addEventListener('click', () => {
 document.getElementById('extraTechConfirm').addEventListener('click', () => {
   const sel = document.getElementById('extraTechSelect');
   if(sel.value){
-    zeitBlocks.push({ id: zeitBlockSeq++, name: sel.value, primary: false, rows: [{id: zeitRowSeq++, von:'', bis:''}] });
+    zeitBlocks.push({ id: zeitBlockSeq++, name: sel.value, primary: false,
+      rows: [{id: zeitRowSeq++, datum: heutigesDatum(), stunden: '', wegepauschale: false}] });
     renderZeitBlocks();
   }
   document.getElementById('addTechTimeModal').style.display = 'none';
@@ -709,6 +764,11 @@ document.getElementById('clearSig').addEventListener('click', () => {
   hasSig = false;
 });
 
+/* ---------- Kein Abnehmer vor Ort ---------- */
+document.getElementById('keinAbnehmer').addEventListener('change', e => {
+  document.getElementById('signatureSection').style.display = e.target.checked ? 'none' : 'block';
+});
+
 /* ---------- PDF Bericht generieren ---------- */
 document.getElementById('genBtn').addEventListener('click', generateReport);
 
@@ -753,25 +813,31 @@ async function generateReport(){
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
     doc.text('Zeiterfassung', margin, y); y += 7;
     doc.setFontSize(10);
-    let mins = 0;
+    let gesamtStunden = 0;
+    let gesamtWegepauschalen = 0;
     zeitBlocks.forEach(block => {
       doc.setFont('helvetica','bold');
       doc.text(block.name + (block.primary ? ' (Gerät)' : ''), margin, y); y += 5.5;
       doc.setFont('helvetica','normal');
       block.rows.forEach(r => {
-        if(r.von || r.bis){
-          doc.text(`  ${r.von || '--:--'}  bis  ${r.bis || '--:--'}`, margin, y);
+        const std = parseFloat((r.stunden||'').toString().replace(',','.')) || 0;
+        if(r.datum || std){
+          const datumFmt = r.datum ? r.datum.split('-').reverse().join('.') : '-';
+          const wegeText = r.wegepauschale ? '  ·  Wegepauschale' : '';
+          doc.text(`  ${datumFmt}   ${std.toFixed(2).replace('.',',').replace(/,?0+$/,'').replace(/,$/,'') || '0'} Std.${wegeText}`, margin, y);
           y += 5.5;
+          if(r.wegepauschale) gesamtWegepauschalen++;
         }
       });
-      const blockMins = minutesOf(block.rows);
-      mins += blockMins;
+      const blockStunden = stundenOf(block.rows);
+      gesamtStunden += blockStunden;
       doc.setFont('helvetica','italic');
-      doc.text(`  Zwischensumme: ${(blockMins/60).toFixed(1).replace('.',',')} Std.`, margin, y);
+      doc.text(`  Zwischensumme: ${blockStunden.toFixed(2).replace('.',',').replace(/,?0+$/,'').replace(/,$/,'')} Std.`, margin, y);
       y += 7;
     });
     doc.setFont('helvetica','bold');
-    doc.text('Gesamt: ' + (mins/60).toFixed(1).replace('.',',') + ' Std.', margin, y);
+    doc.text('Gesamt: ' + gesamtStunden.toFixed(2).replace('.',',').replace(/,?0+$/,'').replace(/,$/,'') + ' Std.'
+      + (gesamtWegepauschalen ? `  ·  Wegepauschalen: ${gesamtWegepauschalen}x` : ''), margin, y);
     y += 10;
 
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
@@ -780,7 +846,12 @@ async function generateReport(){
     const taetigkeit = val('fTaetigkeit') || '-';
     const taetLines = doc.splitTextToSize(taetigkeit, pageW - margin*2);
     doc.text(taetLines, margin, y);
-    y += taetLines.length * 5 + 8;
+    y += taetLines.length * 5 + 6;
+
+    const status = document.querySelector('input[name="arbeitsstatus"]:checked').value;
+    doc.setFont('helvetica','bold');
+    doc.text('Status: ' + (status === 'beendet' ? 'Arbeiten beendet' : 'Arbeiten werden fortgesetzt'), margin, y);
+    y += 10;
 
     if(y > 240){ doc.addPage(); y = 20; }
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
@@ -815,20 +886,68 @@ async function generateReport(){
     if(y > 230){ doc.addPage(); y = 20; }
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
     doc.text('Kundenunterschrift', margin, y); y += 4;
-    if(hasSig){
-      doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, 90, 40);
+
+    const keinAbnehmer = document.getElementById('keinAbnehmer').checked;
+    if(keinAbnehmer){
+      y += 8;
+      doc.setFont('helvetica','italic'); doc.setFontSize(10);
+      doc.text('Unterschriftsberechtigter nicht vor Ort', margin, y);
+      y += 8;
     } else {
+      if(hasSig){
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, 90, 40);
+      } else {
+        doc.setFont('helvetica','normal'); doc.setFontSize(10);
+        doc.text('(keine Unterschrift erfasst)', margin, y + 10);
+      }
+      y += 44;
       doc.setFont('helvetica','normal'); doc.setFontSize(10);
-      doc.text('(keine Unterschrift erfasst)', margin, y + 10);
+      doc.text(val('fKundenname') || '-', margin, y);
+      doc.setDrawColor(180); doc.line(margin, y-1, margin+90, y-1);
+      y += 8;
+      const funktion = val('fAbnehmerFunktion');
+      if(funktion){
+        doc.text('Funktion: ' + funktion, margin, y);
+        y += 6;
+      }
     }
-    y += 44;
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    doc.text(val('fKundenname') || '-', margin, y);
-    doc.setDrawColor(180); doc.line(margin, y-1, margin+90, y-1);
 
     const filename = `Arbeitsbericht_${(val('fAngebotsnr')||'ohne-nr').replace(/[^a-zA-Z0-9\-]/g,'')}.pdf`;
     doc.save(filename);
-    genStatus.textContent = 'Bericht erstellt: ' + filename;
+    genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' — sende an Server ...';
+
+    const zeitDaten = zeitBlocks.map(b => ({
+      techniker: b.name, primary: b.primary,
+      tage: b.rows.map(r => ({datum: r.datum, stunden: r.stunden, wegepauschale: r.wegepauschale}))
+    }));
+    const reportData = {
+      angebotsnr: val('fAngebotsnr') || null,
+      bauvorhaben: val('fBauvorhaben') || null,
+      kunde: val('fKunde') || null,
+      techniker: val('fTechniker') || null,
+      daten: {
+        lieferanschrift: val('fLieferanschrift') || null,
+        ansprechpartner: val('fAnsprechpartner') || null,
+        telefon: val('fTelefon') || null,
+        zeiterfassung: zeitDaten,
+        taetigkeit: val('fTaetigkeit') || null,
+        status: document.querySelector('input[name="arbeitsstatus"]:checked').value,
+        material_checkliste: materialItems.filter(i => i.checked).map(i => i.label),
+        material_freitext: val('fMaterial') || null,
+        kein_abnehmer_vor_ort: document.getElementById('keinAbnehmer').checked,
+        kundenname: val('fKundenname') || null,
+        abnehmer_funktion: val('fAbnehmerFunktion') || null,
+        anzahl_fotos: photos.length
+      }
+    };
+    const sendResult = await sendeBerichtAnServer(reportData);
+    if(sendResult.ok){
+      genStatus.textContent = 'Bericht erstellt und an Server übertragen: ' + filename;
+    } else if(sendResult.reason === 'not-configured'){
+      genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' (Server noch nicht eingerichtet)';
+    } else {
+      genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' — Server-Übertragung fehlgeschlagen, bitte später erneut versuchen.';
+    }
   } catch(err){
     genStatus.textContent = 'Fehler beim Erstellen des Berichts.';
     console.error(err);
@@ -844,6 +963,119 @@ function val(id){
 
 /* Datum vorbelegen */
 document.getElementById('fDatum').valueAsDate = new Date();
+
+/* ============================================================
+   SUPABASE-KONFIGURATION
+   Nach Einrichtung (siehe Anleitung) hier eintragen:
+   ============================================================ */
+const SUPABASE_URL = 'https://guuywhrzygcnpzrnnlsw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1dXl3aHJ6eWdjbnB6cm5ubHN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MjcyOTIsImV4cCI6MjA5OTMwMzI5Mn0.tvPfk5j6mXNG2YcYl4cUR-rF-T3QWdTGuOZ8SHRSv2U';
+const SUPABASE_CONFIGURED = !SUPABASE_URL.includes('DEIN-PROJEKT');
+
+function supabaseHeaders(extra){
+  return Object.assign({
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+    'Content-Type': 'application/json'
+  }, extra || {});
+}
+
+/* ---------- Kontakte: lokal gecachte Kopie + Sync ---------- */
+const LS_KONTAKTE = 'ts_kontakte_cache';
+let kontakteMap = {}; // { bauvorhaben(lowercase): {ansprechpartner, telefon, kunde} }
+
+function ladeKontakteAusCache(){
+  try{ kontakteMap = JSON.parse(localStorage.getItem(LS_KONTAKTE) || '{}'); }catch(e){ kontakteMap = {}; }
+}
+function speichereKontakteCache(){
+  localStorage.setItem(LS_KONTAKTE, JSON.stringify(kontakteMap));
+}
+
+async function syncKontakteVonServer(){
+  const statusEl = document.getElementById('kontaktStatus');
+  if(!SUPABASE_CONFIGURED){
+    statusEl.textContent = 'Supabase noch nicht eingerichtet – Kontakte nur lokal auf diesem Gerät.';
+    statusEl.className = 'pdf-status';
+    return;
+  }
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kontakte?select=*`, { headers: supabaseHeaders() });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    rows.forEach(r => {
+      kontakteMap[r.bauvorhaben.toLowerCase()] = { ansprechpartner: r.ansprechpartner, telefon: r.telefon, kunde: r.kunde };
+    });
+    speichereKontakteCache();
+    statusEl.textContent = `Kontakte synchronisiert (${rows.length} Bauvorhaben bekannt).`;
+    statusEl.className = 'pdf-status ok';
+  } catch(err){
+    console.error('Kontakt-Sync fehlgeschlagen:', err);
+    statusEl.textContent = 'Kontakt-Sync fehlgeschlagen – nutze lokalen Stand.';
+    statusEl.className = 'pdf-status err';
+  }
+}
+
+async function upsertKontakt(){
+  const bauvorhaben = document.getElementById('fBauvorhaben').value.trim();
+  const ansprechpartner = document.getElementById('fAnsprechpartner').value.trim();
+  const telefon = document.getElementById('fTelefon').value.trim();
+  const kunde = document.getElementById('fKunde').value.trim();
+  if(!bauvorhaben || (!ansprechpartner && !telefon)) return;
+
+  kontakteMap[bauvorhaben.toLowerCase()] = { ansprechpartner, telefon, kunde };
+  speichereKontakteCache();
+
+  if(!SUPABASE_CONFIGURED) return;
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/kontakte?on_conflict=bauvorhaben`, {
+      method: 'POST',
+      headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify([{ bauvorhaben, kunde, ansprechpartner, telefon, updated_at: new Date().toISOString() }])
+    });
+  } catch(err){
+    console.error('Kontakt-Upload fehlgeschlagen:', err);
+  }
+}
+
+function autofillKontaktFuerBauvorhaben(){
+  const bauvorhaben = document.getElementById('fBauvorhaben').value.trim().toLowerCase();
+  if(!bauvorhaben || !kontakteMap[bauvorhaben]) return;
+  const eintrag = kontakteMap[bauvorhaben];
+  const apField = document.getElementById('fAnsprechpartner');
+  const telField = document.getElementById('fTelefon');
+  if(!apField.value && eintrag.ansprechpartner) apField.value = eintrag.ansprechpartner;
+  if(!telField.value && eintrag.telefon) telField.value = eintrag.telefon;
+  if(eintrag.ansprechpartner || eintrag.telefon){
+    const statusEl = document.getElementById('kontaktStatus');
+    statusEl.textContent = 'Ansprechpartner aus früherem Bericht übernommen – bitte prüfen.';
+    statusEl.className = 'pdf-status ok';
+  }
+}
+
+document.getElementById('fBauvorhaben').addEventListener('blur', autofillKontaktFuerBauvorhaben);
+document.getElementById('fAnsprechpartner').addEventListener('blur', upsertKontakt);
+document.getElementById('fTelefon').addEventListener('blur', upsertKontakt);
+
+/* ---------- Bericht an Server senden ---------- */
+async function sendeBerichtAnServer(reportData){
+  if(!SUPABASE_CONFIGURED) return { ok: false, reason: 'not-configured' };
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/berichte`, {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify([reportData])
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    return { ok: true };
+  } catch(err){
+    console.error('Berichts-Upload fehlgeschlagen:', err);
+    return { ok: false, reason: err.message };
+  }
+}
+
+/* Beim Start: gecachte Kontakte laden, dann mit Server abgleichen */
+ladeKontakteAusCache();
+syncKontakteVonServer();
 
 /* ---------- Lieferanschrift Toggle ---------- */
 document.getElementById('toggleLieferanschrift').addEventListener('click', () => {

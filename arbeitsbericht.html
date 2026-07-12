@@ -260,6 +260,8 @@
         <input type="tel" id="fTelefon" placeholder="0721 ...">
       </div>
     </div>
+    <label style="margin-top:10px;">E-Mail-Adresse</label>
+    <input type="email" id="fEmail" placeholder="name@firma.de">
     <div class="pdf-status" id="kontaktStatus"></div>
 
     <div class="row2">
@@ -948,6 +950,7 @@ async function generateReport(){
         lieferanschrift: val('fLieferanschrift') || null,
         ansprechpartner: val('fAnsprechpartner') || null,
         telefon: val('fTelefon') || null,
+        email: val('fEmail') || null,
         zeiterfassung: zeitDaten,
         taetigkeit: val('fTaetigkeit') || null,
         status: document.querySelector('input[name="arbeitsstatus"]:checked').value,
@@ -1039,7 +1042,7 @@ async function syncKontakteVonServer(){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
     rows.forEach(r => {
-      kontakteMap[r.bauvorhaben.toLowerCase()] = { ansprechpartner: r.ansprechpartner, telefon: r.telefon, kunde: r.kunde };
+      kontakteMap[r.bauvorhaben.toLowerCase()] = { ansprechpartner: r.ansprechpartner, telefon: r.telefon, email: r.email, kunde: r.kunde };
     });
     speichereKontakteCache();
     statusEl.textContent = `Kontakte synchronisiert (${rows.length} Bauvorhaben bekannt).`;
@@ -1055,10 +1058,11 @@ async function upsertKontakt(){
   const bauvorhaben = document.getElementById('fBauvorhaben').value.trim();
   const ansprechpartner = document.getElementById('fAnsprechpartner').value.trim();
   const telefon = document.getElementById('fTelefon').value.trim();
+  const email = document.getElementById('fEmail').value.trim();
   const kunde = document.getElementById('fKunde').value.trim();
-  if(!bauvorhaben || (!ansprechpartner && !telefon)) return;
+  if(!bauvorhaben || (!ansprechpartner && !telefon && !email)) return;
 
-  kontakteMap[bauvorhaben.toLowerCase()] = { ansprechpartner, telefon, kunde };
+  kontakteMap[bauvorhaben.toLowerCase()] = { ansprechpartner, telefon, email, kunde };
   speichereKontakteCache();
 
   if(!SUPABASE_CONFIGURED) return;
@@ -1066,7 +1070,7 @@ async function upsertKontakt(){
     await fetch(`${SUPABASE_URL}/rest/v1/kontakte?on_conflict=bauvorhaben`, {
       method: 'POST',
       headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-      body: JSON.stringify([{ bauvorhaben, kunde, ansprechpartner, telefon, updated_at: new Date().toISOString() }])
+      body: JSON.stringify([{ bauvorhaben, kunde, ansprechpartner, telefon, email, updated_at: new Date().toISOString() }])
     });
   } catch(err){
     console.error('Kontakt-Upload fehlgeschlagen:', err);
@@ -1079,9 +1083,11 @@ function autofillKontaktFuerBauvorhaben(){
   const eintrag = kontakteMap[bauvorhaben];
   const apField = document.getElementById('fAnsprechpartner');
   const telField = document.getElementById('fTelefon');
+  const emailField = document.getElementById('fEmail');
   if(!apField.value && eintrag.ansprechpartner) apField.value = eintrag.ansprechpartner;
   if(!telField.value && eintrag.telefon) telField.value = eintrag.telefon;
-  if(eintrag.ansprechpartner || eintrag.telefon){
+  if(!emailField.value && eintrag.email) emailField.value = eintrag.email;
+  if(eintrag.ansprechpartner || eintrag.telefon || eintrag.email){
     const statusEl = document.getElementById('kontaktStatus');
     statusEl.textContent = 'Ansprechpartner aus früherem Bericht übernommen – bitte prüfen.';
     statusEl.className = 'pdf-status ok';
@@ -1091,6 +1097,7 @@ function autofillKontaktFuerBauvorhaben(){
 document.getElementById('fBauvorhaben').addEventListener('blur', autofillKontaktFuerBauvorhaben);
 document.getElementById('fAnsprechpartner').addEventListener('blur', upsertKontakt);
 document.getElementById('fTelefon').addEventListener('blur', upsertKontakt);
+document.getElementById('fEmail').addEventListener('blur', upsertKontakt);
 
 /* ---------- Bericht an Server senden ---------- */
 const STORAGE_BUCKET = 'berichte-medien';

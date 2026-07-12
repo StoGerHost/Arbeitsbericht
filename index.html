@@ -117,6 +117,7 @@ async function sucheKontakt(){
         <div class="bv">${esc(r.bauvorhaben) || 'Ohne Bauvorhaben'}</div>
         <div class="kd">${esc(r.kunde) || '-'} · ${esc(r.ansprechpartner) || 'kein Ansprechpartner erfasst'}</div>
         ${r.telefon ? `<a class="tel" href="tel:${esc(r.telefon).replace(/\s+/g,'')}">📞 ${esc(r.telefon)}</a>` : '<span style="color:var(--muted);font-size:12.5px;">keine Telefonnummer erfasst</span>'}
+        ${r.email ? `<br><a class="tel" href="mailto:${esc(r.email)}">✉️ ${esc(r.email)}</a>` : ''}
       </div>
     `).join('');
   } catch(err){

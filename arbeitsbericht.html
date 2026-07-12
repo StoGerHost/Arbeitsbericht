@@ -262,6 +262,7 @@
     </div>
     <label style="margin-top:10px;">E-Mail-Adresse</label>
     <input type="email" id="fEmail" placeholder="name@firma.de">
+    <div class="pdf-status" id="emailStatus"></div>
     <div class="pdf-status" id="kontaktStatus"></div>
 
     <div class="row2">
@@ -950,7 +951,7 @@ async function generateReport(){
         lieferanschrift: val('fLieferanschrift') || null,
         ansprechpartner: val('fAnsprechpartner') || null,
         telefon: val('fTelefon') || null,
-        email: val('fEmail') || null,
+        email: (val('fEmail') && EMAIL_REGEX.test(val('fEmail').trim())) ? val('fEmail').trim() : null,
         zeiterfassung: zeitDaten,
         taetigkeit: val('fTaetigkeit') || null,
         status: document.querySelector('input[name="arbeitsstatus"]:checked').value,
@@ -1058,7 +1059,8 @@ async function upsertKontakt(){
   const bauvorhaben = document.getElementById('fBauvorhaben').value.trim();
   const ansprechpartner = document.getElementById('fAnsprechpartner').value.trim();
   const telefon = document.getElementById('fTelefon').value.trim();
-  const email = document.getElementById('fEmail').value.trim();
+  let email = document.getElementById('fEmail').value.trim();
+  if(email && !EMAIL_REGEX.test(email)) email = ''; // ungültige E-Mail nie speichern
   const kunde = document.getElementById('fKunde').value.trim();
   if(!bauvorhaben || (!ansprechpartner && !telefon && !email)) return;
 
@@ -1097,7 +1099,39 @@ function autofillKontaktFuerBauvorhaben(){
 document.getElementById('fBauvorhaben').addEventListener('blur', autofillKontaktFuerBauvorhaben);
 document.getElementById('fAnsprechpartner').addEventListener('blur', upsertKontakt);
 document.getElementById('fTelefon').addEventListener('blur', upsertKontakt);
-document.getElementById('fEmail').addEventListener('blur', upsertKontakt);
+
+/* ---------- E-Mail-Format-Validierung ---------- */
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+function emailIstGueltig(){
+  const feld = document.getElementById('fEmail');
+  const statusEl = document.getElementById('emailStatus');
+  const wert = feld.value.trim();
+
+  if(!wert){
+    statusEl.textContent = '';
+    feld.style.borderColor = '';
+    return true; // Feld ist optional, leer ist ok
+  }
+  if(EMAIL_REGEX.test(wert)){
+    statusEl.textContent = '';
+    feld.style.borderColor = '';
+    return true;
+  }
+  statusEl.textContent = 'Sieht nicht wie eine gültige E-Mail-Adresse aus – wird nicht gespeichert.';
+  statusEl.className = 'pdf-status err';
+  feld.style.borderColor = 'var(--danger)';
+  return false;
+}
+
+document.getElementById('fEmail').addEventListener('blur', () => {
+  if(emailIstGueltig()) upsertKontakt();
+});
+document.getElementById('fEmail').addEventListener('input', () => {
+  // Fehleranzeige beim Weitertippen zurücksetzen, nicht bei jedem Tastendruck neu prüfen
+  document.getElementById('emailStatus').textContent = '';
+  document.getElementById('fEmail').style.borderColor = '';
+});
 
 /* ---------- Bericht an Server senden ---------- */
 const STORAGE_BUCKET = 'berichte-medien';

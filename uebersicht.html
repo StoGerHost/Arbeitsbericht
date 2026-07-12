@@ -386,7 +386,17 @@ function renderDetail(b){
       <div><dt>Telefon</dt><dd>${esc(d.telefon) || '-'}</dd></div>
       <div><dt>E-Mail</dt><dd>${esc(d.email) || '-'}</dd></div>
       ${d.lieferanschrift ? `<div><dt>Lieferanschrift</dt><dd>${esc(d.lieferanschrift)}</dd></div>` : ''}
+      ${d.standort ? `<div><dt>Standort beim Absenden</dt><dd><a href="https://maps.google.com/?q=${d.standort.lat},${d.standort.lng}" target="_blank" style="color:var(--blue);">${d.standort.lat.toFixed(5)}, ${d.standort.lng.toFixed(5)}</a> <span style="color:var(--muted);font-size:11px;">(±${d.standort.genauigkeit_m}m)</span></dd></div>` : ''}
     </dl>
+
+    ${d.standort ? `
+      <p class="section-label">Kartenausschnitt</p>
+      <iframe
+        style="width:100%; height:220px; border:1px solid var(--line); border-radius:2px;"
+        src="https://www.openstreetmap.org/export/embed.html?bbox=${d.standort.lng-0.006}%2C${d.standort.lat-0.004}%2C${d.standort.lng+0.006}%2C${d.standort.lat+0.004}&marker=${d.standort.lat}%2C${d.standort.lng}"
+        loading="lazy">
+      </iframe>
+    ` : ''}
 
     <p class="section-label">Zeiterfassung</p>
     ${zeitHtml}
@@ -405,12 +415,12 @@ function renderDetail(b){
            ${d.unterschrift_url ? `<br><img src="${esc(d.unterschrift_url)}" style="max-width:220px;background:#fff;border-radius:2px;margin-top:8px;">` : `<br><span style="color:var(--muted);font-size:12px;">Keine Unterschrift in der Datenbank gespeichert (Speichern-Schalter war aus).</span>`}`}
     </div>
 
+    <p class="section-label">Fotos</p>
     ${(d.foto_urls && d.foto_urls.length) ? `
-      <p class="section-label">Fotos (${d.foto_urls.length})</p>
       <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px;">
         ${d.foto_urls.map(u => `<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:2px; border:1px solid var(--line);"></a>`).join('')}
       </div>
-    ` : ''}
+    ` : '<div style="font-size:12.5px; color:var(--muted);">Keine Fotos in der Datenbank gespeichert (Speichern-Schalter war aus, oder es wurden keine Fotos aufgenommen).</div>'}
 
     <button class="pdf-btn">PDF neu erzeugen</button>
   `;

@@ -221,6 +221,15 @@
         Wenn aktiv, werden Fotos und Unterschrift zusätzlich zum lokalen PDF auch in die Datenbank hochgeladen (Supabase Storage) und sind dann in der Büroübersicht sichtbar. Verbraucht Speicherplatz — bei Bedarf ausschalten.
       </div>
     </div>
+    <div style="border-top:1px solid var(--line);padding:14px 0;">
+      <label style="display:flex; align-items:center; gap:8px; margin:0; color:var(--text); font-size:14px; cursor:pointer;">
+        <input type="checkbox" id="standortToggle" style="width:17px;height:17px;accent-color:var(--amber);">
+        Standort beim Absenden mit übertragen
+      </label>
+      <div style="font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.4;">
+        Fragt beim Absenden eines Berichts den aktuellen GPS-Standort ab und speichert ihn mit. Der Browser fragt dafür explizit um Erlaubnis. Techniker sollten wissen, dass das aktiv ist.
+      </div>
+    </div>
     <div style="border-top:1px solid var(--line);padding-top:14px;">
       <button class="add-btn" id="switchTechBtn" style="width:100%;text-align:center;margin-bottom:8px;">Techniker dieses Geräts ändern</button>
       <button class="clear-link" id="closeAdmin">schließen</button>
@@ -969,6 +978,12 @@ async function generateReport(){
        Seite in den Hintergrund geschoben wird — laufende Netzwerk-Requests
        können danach abgebrochen/verzögert werden. Deshalb zuerst der Upload. */
     genStatus.textContent = 'Sende an Server ...';
+    if(localStorage.getItem('ts_standort_uebertragen') === '1'){
+      genStatus.textContent = 'Frage Standort ab ...';
+    }
+    const standort = await ermittleStandort();
+    if(standort) reportData.daten.standort = standort;
+    genStatus.textContent = 'Sende an Server ...';
     const medien = await ladeMedienHoch(val('fAngebotsnr'));
     reportData.daten.foto_urls = medien.fotoUrls;
     reportData.daten.unterschrift_url = medien.unterschriftUrl;
@@ -1132,6 +1147,30 @@ document.getElementById('fEmail').addEventListener('input', () => {
   document.getElementById('emailStatus').textContent = '';
   document.getElementById('fEmail').style.borderColor = '';
 });
+
+/* ---------- Standort (GPS) ---------- */
+function ermittleStandort(){
+  return new Promise(resolve => {
+    const aktiv = localStorage.getItem('ts_standort_uebertragen') === '1';
+    if(!aktiv || !navigator.geolocation){
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        genauigkeit_m: Math.round(pos.coords.accuracy),
+        erfasst_am: new Date().toISOString()
+      }),
+      err => {
+        console.error('Standort konnte nicht ermittelt werden:', err.message);
+        resolve(null); // Bericht trotzdem ganz normal weiter erzeugen
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  });
+}
 
 /* ---------- Bericht an Server senden ---------- */
 const STORAGE_BUCKET = 'berichte-medien';
@@ -1297,7 +1336,22 @@ window.addEventListener('DOMContentLoaded', () => {
 document.getElementById('adminBtn').addEventListener('click', () => {
   renderTechList();
   document.getElementById('bilderSpeichernToggle').checked = localStorage.getItem('ts_bilder_speichern') === '1';
+  document.getElementById('standortToggle').checked = localStorage.getItem('ts_standort_uebertragen') === '1';
   adminModal.style.display = 'flex';
+});
+const STANDORT_PASSWORT = 'sto7808'; // <- Zugangscode hier bei Bedarf ändern
+
+document.getElementById('standortToggle').addEventListener('click', function(e){
+  e.preventDefault(); // Häkchen zunächst nicht setzen, erst nach korrektem Code
+  const neuerZustand = !this.checked;
+  const eingabe = prompt('Zugangscode zum Ändern der Standort-Funktion:');
+  if(eingabe === null) return; // abgebrochen
+  if(eingabe === STANDORT_PASSWORT){
+    this.checked = neuerZustand;
+    localStorage.setItem('ts_standort_uebertragen', neuerZustand ? '1' : '0');
+  } else {
+    alert('Falscher Zugangscode – Standort-Funktion wurde nicht geändert.');
+  }
 });
 function aktualisiereMedienStatus(){
   const an = localStorage.getItem('ts_bilder_speichern') === '1';

@@ -227,7 +227,7 @@
         Standort beim Absenden mit übertragen
       </label>
       <div style="font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.4;">
-        Fragt beim Absenden eines Berichts den aktuellen GPS-Standort ab und speichert ihn mit. Der Browser fragt dafür explizit um Erlaubnis. Techniker sollten wissen, dass das aktiv ist.
+        Standardmäßig aktiv. Fragt beim Absenden eines Berichts den aktuellen GPS-Standort ab und speichert ihn mit. Der Browser fragt dafür explizit um Erlaubnis. Ausschalten und Wiedereinschalten erfordern jeweils den Zugangscode.
       </div>
     </div>
     <div style="border-top:1px solid var(--line);padding-top:14px;">
@@ -978,7 +978,7 @@ async function generateReport(){
        Seite in den Hintergrund geschoben wird — laufende Netzwerk-Requests
        können danach abgebrochen/verzögert werden. Deshalb zuerst der Upload. */
     genStatus.textContent = 'Sende an Server ...';
-    if(localStorage.getItem('ts_standort_uebertragen') === '1'){
+    if(standortIstAktiv()){
       genStatus.textContent = 'Frage Standort ab ...';
     }
     const standort = await ermittleStandort();
@@ -1148,10 +1148,15 @@ document.getElementById('fEmail').addEventListener('input', () => {
   document.getElementById('fEmail').style.borderColor = '';
 });
 
+/* Standort ist standardmäßig AN — nur ein explizites "0" (per Passwort ausgeschaltet) deaktiviert es */
+function standortIstAktiv(){
+  return localStorage.getItem('ts_standort_uebertragen') !== '0';
+}
+
 /* ---------- Standort (GPS) ---------- */
 function ermittleStandort(){
   return new Promise(resolve => {
-    const aktiv = localStorage.getItem('ts_standort_uebertragen') === '1';
+    const aktiv = standortIstAktiv();
     if(!aktiv || !navigator.geolocation){
       resolve(null);
       return;
@@ -1336,7 +1341,7 @@ window.addEventListener('DOMContentLoaded', () => {
 document.getElementById('adminBtn').addEventListener('click', () => {
   renderTechList();
   document.getElementById('bilderSpeichernToggle').checked = localStorage.getItem('ts_bilder_speichern') === '1';
-  document.getElementById('standortToggle').checked = localStorage.getItem('ts_standort_uebertragen') === '1';
+  document.getElementById('standortToggle').checked = standortIstAktiv();
   adminModal.style.display = 'flex';
 });
 const STANDORT_PASSWORT = 'sto7808'; // <- Zugangscode hier bei Bedarf ändern

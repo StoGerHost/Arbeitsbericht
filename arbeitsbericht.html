@@ -182,6 +182,7 @@
       <p class="eyebrow">Blueprint · TS-Suite</p>
       <h1>Arbeitsbericht</h1>
       <div class="sub">Auftrag erfassen, abschließen, als PDF exportieren</div>
+      <div id="standortHinweis" style="display:none; margin-top:8px; font-size:11.5px; color:var(--amber); font-family:'IBM Plex Mono',monospace;">📍 GPS-Standort wird bei Berichtserstellung erfasst und übermittelt</div>
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
       <button id="adminBtn" title="Techniker-Verwaltung" style="background:transparent;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:var(--radius);cursor:pointer;font-size:15px;">⚙</button>
@@ -1152,6 +1153,10 @@ document.getElementById('fEmail').addEventListener('input', () => {
 function standortIstAktiv(){
   return localStorage.getItem('ts_standort_uebertragen') !== '0';
 }
+function aktualisiereStandortHinweis(){
+  document.getElementById('standortHinweis').style.display = standortIstAktiv() ? 'block' : 'none';
+}
+aktualisiereStandortHinweis();
 
 /* ---------- Standort (GPS) ---------- */
 function ermittleStandort(){
@@ -1354,6 +1359,7 @@ document.getElementById('standortToggle').addEventListener('click', function(e){
   if(eingabe === STANDORT_PASSWORT){
     this.checked = neuerZustand;
     localStorage.setItem('ts_standort_uebertragen', neuerZustand ? '1' : '0');
+    aktualisiereStandortHinweis();
   } else {
     alert('Falscher Zugangscode – Standort-Funktion wurde nicht geändert.');
   }

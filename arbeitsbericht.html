@@ -315,6 +315,12 @@
         Wird fortgesetzt
       </label>
     </div>
+
+    <label style="margin-top:14px;">Interner Bericht <span style="color:var(--muted);font-weight:normal;">(nicht für den Kunden)</span></label>
+    <textarea id="fInternerBericht" placeholder="Nur für intern, z. B. Rückfragen an den Innendienst, Auffälligkeiten ..." style="min-height:70px;"></textarea>
+
+    <label style="margin-top:14px;">Hinweis</label>
+    <textarea id="fHinweis" placeholder="Zusätzlicher Hinweis, falls nötig ..." style="min-height:70px;"></textarea>
   </div>
 
   <div class="card">
@@ -889,6 +895,26 @@ async function generateReport(){
     doc.text('Status: ' + (status === 'beendet' ? 'Arbeiten beendet' : 'Arbeiten werden fortgesetzt'), margin, y);
     y += 10;
 
+    const internerBericht = val('fInternerBericht');
+    if(internerBericht){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text('Interner Bericht (nicht für den Kunden)', margin, y); y += 7;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      const ibLines = doc.splitTextToSize(internerBericht, pageW - margin*2);
+      doc.text(ibLines, margin, y); y += ibLines.length * 5 + 8;
+    }
+
+    const hinweis = val('fHinweis');
+    if(hinweis){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text('Hinweis', margin, y); y += 7;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      const hLines = doc.splitTextToSize(hinweis, pageW - margin*2);
+      doc.text(hLines, margin, y); y += hLines.length * 5 + 8;
+    }
+
     if(y > 240){ doc.addPage(); y = 20; }
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
     doc.text('Materialverbrauch', margin, y); y += 7;
@@ -965,6 +991,8 @@ async function generateReport(){
         zeiterfassung: zeitDaten,
         taetigkeit: val('fTaetigkeit') || null,
         status: document.querySelector('input[name="arbeitsstatus"]:checked').value,
+        interner_bericht: val('fInternerBericht') || null,
+        hinweis: val('fHinweis') || null,
         material_checkliste: materialItems.filter(i => i.checked).map(i => i.label),
         material_freitext: val('fMaterial') || null,
         kein_abnehmer_vor_ort: document.getElementById('keinAbnehmer').checked,
@@ -983,7 +1011,13 @@ async function generateReport(){
       genStatus.textContent = 'Frage Standort ab ...';
     }
     const standort = await ermittleStandort();
-    if(standort) reportData.daten.standort = standort;
+    if(standort){
+      reportData.daten.standort = standort; // bleibt für die Detailansicht in der Übersicht erhalten
+      reportData.standort_lat = standort.lat;
+      reportData.standort_lng = standort.lng;
+      reportData.standort_genauigkeit_m = standort.genauigkeit_m;
+      reportData.standort_erfasst_am = standort.erfasst_am;
+    }
     genStatus.textContent = 'Sende an Server ...';
     const medien = await ladeMedienHoch(val('fAngebotsnr'));
     reportData.daten.foto_urls = medien.fotoUrls;

@@ -437,6 +437,9 @@ function renderDetail(b){
     <p class="section-label">Tätigkeitsbeschreibung</p>
     <div style="font-size:13.5px; white-space:pre-wrap;">${esc(d.taetigkeit) || '-'}</div>
 
+    ${d.interner_bericht ? `<p class="section-label">Interner Bericht (nicht für den Kunden)</p><div style="font-size:13.5px; white-space:pre-wrap;">${esc(d.interner_bericht)}</div>` : ''}
+    ${d.hinweis ? `<p class="section-label">Hinweis</p><div style="font-size:13.5px; white-space:pre-wrap;">${esc(d.hinweis)}</div>` : ''}
+
     ${matHtml ? `<p class="section-label">Materialverbrauch</p>${matHtml}` : ''}
     ${d.material_freitext ? `<div style="font-size:13.5px; margin-top:6px; white-space:pre-wrap;">${esc(d.material_freitext)}</div>` : ''}
 
@@ -538,6 +541,24 @@ async function erzeugePdf(b){
   doc.setFont('helvetica','bold');
   doc.text('Status: ' + (d.status === 'fortgesetzt' ? 'Arbeiten werden fortgesetzt' : 'Arbeiten beendet'), margin, y);
   y += 10;
+
+  if(d.interner_bericht){
+    if(y > 250){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Interner Bericht (nicht für den Kunden)', margin, y); y += 7;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const ibLines = doc.splitTextToSize(d.interner_bericht, pageW - margin*2);
+    doc.text(ibLines, margin, y); y += ibLines.length * 5 + 8;
+  }
+
+  if(d.hinweis){
+    if(y > 250){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Hinweis', margin, y); y += 7;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const hLines = doc.splitTextToSize(d.hinweis, pageW - margin*2);
+    doc.text(hLines, margin, y); y += hLines.length * 5 + 8;
+  }
 
   if(y > 250){ doc.addPage(); y = 20; }
   doc.setFont('helvetica','bold'); doc.setFontSize(12);

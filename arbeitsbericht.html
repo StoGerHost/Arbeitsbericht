@@ -231,6 +231,19 @@
         Standardmäßig aktiv. Fragt beim Absenden eines Berichts den aktuellen GPS-Standort ab und speichert ihn mit. Der Browser fragt dafür explizit um Erlaubnis. Ausschalten und Wiedereinschalten erfordern jeweils den Zugangscode.
       </div>
     </div>
+    <div style="border-top:1px solid var(--line);padding:14px 0;">
+      <label style="margin:0 0 8px;color:var(--text);font-size:14px;">Trello-Anbindung (dieses Gerät)</label>
+      <input type="text" id="trelloKeyInput" placeholder="API-Key" autocomplete="off" style="margin-bottom:8px;">
+      <input type="text" id="trelloTokenInput" placeholder="Token" autocomplete="off" style="margin-bottom:8px;">
+      <div style="display:flex;gap:8px;">
+        <button class="add-btn" id="trelloSaveBtn" style="flex:1;text-align:center;">Speichern</button>
+        <button class="add-btn" id="trelloTokenLink" style="flex:1;text-align:center;">Token holen</button>
+      </div>
+      <div class="pdf-status" id="trelloCfgStatus"></div>
+      <div style="font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.4;">
+        Ermöglicht das Öffnen eines Berichts direkt aus einer Trello-Karte (Link mit <span style="font-family:'IBM Plex Mono',monospace;">?card=...</span>) und die Rückmeldung als Kommentar auf der Karte. Key einmalig unter trello.com/power-ups/admin erzeugen, dann „Token holen" antippen.
+      </div>
+    </div>
     <div style="border-top:1px solid var(--line);padding-top:14px;">
       <button class="add-btn" id="switchTechBtn" style="width:100%;text-align:center;margin-bottom:8px;">Techniker dieses Geräts ändern</button>
       <button class="clear-link" id="closeAdmin">schließen</button>
@@ -469,17 +482,7 @@ async function handleAuftragsdatei(file){
   try{
     const text = await file.text();
     const daten = JSON.parse(text);
-    if(daten.typ !== 'ts-auftrag'){
-      throw new Error('Keine gültige TS-Suite-Auftragsdatei.');
-    }
-    if(daten.kunde)        document.getElementById('fKunde').value = daten.kunde;
-    if(daten.bauvorhaben)  document.getElementById('fBauvorhaben').value = daten.bauvorhaben;
-    if(daten.ansprechpartner) document.getElementById('fAnsprechpartner').value = daten.ansprechpartner;
-    if(daten.telefon)      document.getElementById('fTelefon').value = daten.telefon;
-    if(daten.email)        document.getElementById('fEmail').value = daten.email;
-    if(daten.hinweis)      document.getElementById('fHinweis').value = daten.hinweis;
-    importierteKundeId = daten.kunde_id || null;
-
+    uebernehmeAuftragsdaten(daten);
     auftragStatus.textContent = `Auftrag geladen: ${daten.bauvorhaben || '–'} · ${daten.kunde || 'ohne Kunde'}`;
     auftragStatus.className = 'pdf-status ok';
   } catch(err){
@@ -488,6 +491,146 @@ async function handleAuftragsdatei(file){
     auftragStatus.className = 'pdf-status err';
   }
 }
+
+/* Befüllt die Auftragsfelder aus einem ts-auftrag-Objekt.
+   Wird vom Datei-Import UND vom Trello-Import benutzt. */
+function uebernehmeAuftragsdaten(daten){
+  if(daten.typ !== 'ts-auftrag'){
+    throw new Error('Keine gültige TS-Suite-Auftragsdatei.');
+  }
+  if(daten.kunde)        document.getElementById('fKunde').value = daten.kunde;
+  if(daten.bauvorhaben)  document.getElementById('fBauvorhaben').value = daten.bauvorhaben;
+  if(daten.ansprechpartner) document.getElementById('fAnsprechpartner').value = daten.ansprechpartner;
+  if(daten.telefon)      document.getElementById('fTelefon').value = daten.telefon;
+  if(daten.email)        document.getElementById('fEmail').value = daten.email;
+  if(daten.hinweis)      document.getElementById('fHinweis').value = daten.hinweis;
+  importierteKundeId = daten.kunde_id || null;
+}
+
+/* ---------- Trello-Anbindung ---------- */
+const LS_TRELLO_KEY   = 'ts_trello_key';
+const LS_TRELLO_TOKEN = 'ts_trello_token';
+let trelloCardId = null; // gesetzt, wenn der Bericht aus einer Trello-Karte geöffnet wurde
+
+function trelloConfig(){
+  return {
+    key: localStorage.getItem(LS_TRELLO_KEY) || '',
+    token: localStorage.getItem(LS_TRELLO_TOKEN) || ''
+  };
+}
+function trelloIstKonfiguriert(){
+  const c = trelloConfig();
+  return !!(c.key && c.token);
+}
+
+/* Sucht das ts-auftrag-JSON in der Kartenbeschreibung.
+   Erlaubt: reine JSON-Beschreibung ODER ein ```json ... ```-Block
+   (dann kann darüber normaler Text für die Techniker stehen). */
+function extrahiereAuftragAusBeschreibung(desc){
+  if(!desc) return null;
+  const fence = desc.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const kandidaten = [];
+  if(fence) kandidaten.push(fence[1]);
+  kandidaten.push(desc);
+  for(const k of kandidaten){
+    try{
+      const obj = JSON.parse(k.trim());
+      if(obj && obj.typ === 'ts-auftrag') return obj;
+    } catch(e){ /* nächsten Kandidaten versuchen */ }
+  }
+  return null;
+}
+
+async function ladeAuftragAusTrello(cardId){
+  auftragStatus.textContent = 'Lade Auftrag aus Trello ...';
+  auftragStatus.className = 'pdf-status';
+  const { key, token } = trelloConfig();
+  try{
+    const res = await fetch(
+      `https://api.trello.com/1/cards/${encodeURIComponent(cardId)}?fields=name,desc,shortUrl&key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`
+    );
+    if(res.status === 401) throw new Error('Trello-Zugang ungültig — Key/Token unter ⚙ prüfen.');
+    if(!res.ok) throw new Error('Trello antwortet mit HTTP ' + res.status);
+    const card = await res.json();
+    const daten = extrahiereAuftragAusBeschreibung(card.desc);
+    if(!daten){
+      throw new Error('Karte „' + (card.name || cardId) + '" enthält keinen ts-auftrag-Block in der Beschreibung.');
+    }
+    uebernehmeAuftragsdaten(daten);
+    trelloCardId = card.id || cardId;
+    auftragStatus.textContent = `Auftrag aus Trello geladen: ${daten.bauvorhaben || '–'} · ${daten.kunde || 'ohne Kunde'}`;
+    auftragStatus.className = 'pdf-status ok';
+  } catch(err){
+    console.error('Trello-Import fehlgeschlagen:', err);
+    trelloCardId = null;
+    auftragStatus.textContent = 'Trello-Import fehlgeschlagen: ' + err.message;
+    auftragStatus.className = 'pdf-status err';
+  }
+}
+
+/* Nach erfolgreichem Absenden: Rückmeldung als Kommentar auf die Karte.
+   Bewusst nicht blockierend — der Bericht ist zu diesem Zeitpunkt schon sicher gespeichert. */
+async function meldeAnTrelloZurueck(status, techniker){
+  if(!trelloCardId || !trelloIstKonfiguriert()) return { ok: false, uebersprungen: true };
+  const { key, token } = trelloConfig();
+  const text = `✅ Arbeitsbericht erstellt — Techniker: ${techniker || '–'}, Status: ${status || '–'}, ${new Date().toLocaleString('de-DE')}`;
+  try{
+    const res = await fetch(
+      `https://api.trello.com/1/cards/${encodeURIComponent(trelloCardId)}/actions/comments?text=${encodeURIComponent(text)}&key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`,
+      { method: 'POST' }
+    );
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    return { ok: true };
+  } catch(err){
+    console.error('Trello-Rückmeldung fehlgeschlagen:', err);
+    return { ok: false, reason: err.message };
+  }
+}
+
+/* Beim Start: ?card=... aus der URL auswerten */
+(function(){
+  const cardId = new URLSearchParams(location.search).get('card');
+  if(!cardId) return;
+  if(!trelloIstKonfiguriert()){
+    auftragStatus.textContent = 'Dieser Link kommt aus Trello — bitte einmalig unter ⚙ den Trello-Zugang (Key + Token) einrichten und die Seite neu laden.';
+    auftragStatus.className = 'pdf-status err';
+    return;
+  }
+  ladeAuftragAusTrello(cardId);
+})();
+
+/* Trello-Einstellungen im Admin-Panel */
+(function(){
+  const keyInput = document.getElementById('trelloKeyInput');
+  const tokenInput = document.getElementById('trelloTokenInput');
+  const cfgStatus = document.getElementById('trelloCfgStatus');
+  keyInput.value = localStorage.getItem(LS_TRELLO_KEY) || '';
+  tokenInput.value = localStorage.getItem(LS_TRELLO_TOKEN) || '';
+
+  document.getElementById('trelloSaveBtn').addEventListener('click', () => {
+    localStorage.setItem(LS_TRELLO_KEY, keyInput.value.trim());
+    localStorage.setItem(LS_TRELLO_TOKEN, tokenInput.value.trim());
+    cfgStatus.textContent = trelloIstKonfiguriert() ? 'Trello-Zugang gespeichert.' : 'Gespeichert — Key oder Token fehlt noch.';
+    cfgStatus.className = trelloIstKonfiguriert() ? 'pdf-status ok' : 'pdf-status err';
+    /* Falls die Seite bereits mit ?card=... offen ist, direkt nachladen */
+    const cardId = new URLSearchParams(location.search).get('card');
+    if(cardId && trelloIstKonfiguriert()) ladeAuftragAusTrello(cardId);
+  });
+
+  document.getElementById('trelloTokenLink').addEventListener('click', () => {
+    const key = keyInput.value.trim();
+    if(!key){
+      cfgStatus.textContent = 'Bitte zuerst den API-Key eintragen.';
+      cfgStatus.className = 'pdf-status err';
+      return;
+    }
+    window.open(
+      `https://trello.com/1/authorize?expiration=never&name=TS-Suite%20Arbeitsbericht&scope=read,write&response_type=token&key=${encodeURIComponent(key)}`,
+      '_blank'
+    );
+  });
+})();
+
 /* Manuelle Korrektur nach dem Laden hebt die sichere Zuordnung wieder auf,
    dann greift beim Speichern wieder der normale Namensabgleich. */
 document.getElementById('fKunde').addEventListener('input', () => { importierteKundeId = null; });
@@ -1078,6 +1221,16 @@ async function generateReport(){
       if(medien.fehler && medien.fehler.length){
         genStatus.textContent += ' — Achtung, Medien-Upload teilweise fehlgeschlagen: ' + medien.fehler.join('; ');
         genStatus.className = 'gen-status err';
+      }
+      /* Rückmeldung an Trello, falls der Bericht aus einer Karte geöffnet wurde */
+      const trelloResult = await meldeAnTrelloZurueck(
+        document.querySelector('input[name="arbeitsstatus"]:checked').value,
+        val('fTechniker')
+      );
+      if(trelloResult.ok){
+        genStatus.textContent += ' — Trello-Karte aktualisiert.';
+      } else if(!trelloResult.uebersprungen){
+        genStatus.textContent += ' — Hinweis: Trello-Rückmeldung fehlgeschlagen (' + trelloResult.reason + ').';
       }
     } else if(sendResult.reason === 'not-configured'){
       genStatus.textContent = 'Bericht lokal gespeichert: ' + filename + ' (Server noch nicht eingerichtet)';

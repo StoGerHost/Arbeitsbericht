@@ -248,8 +248,15 @@
     <input type="file" id="pdfInput" accept="application/pdf" style="display:none">
     <div class="pdf-status" id="pdfStatus"></div>
 
+    <button id="auftragBtn" style="background:none;border:1px solid var(--line);color:var(--blue);
+      font-size:12.5px;cursor:pointer;padding:8px 12px;border-radius:var(--radius);margin-top:8px;width:100%;">
+      📋 Auftrag aus CRM laden (.json)</button>
+    <input type="file" id="auftragInput" accept="application/json,.json" style="display:none">
+    <div class="pdf-status" id="auftragStatus"></div>
+
     <label>Kunde</label>
-    <input type="text" id="fKunde" placeholder="z. B. Stadt Karlsruhe">
+    <input type="text" id="fKunde" placeholder="z. B. Stadt Karlsruhe" list="kundenListe" autocomplete="off">
+    <datalist id="kundenListe"></datalist>
 
     <label>Bauvorhaben</label>
     <input type="text" id="fBauvorhaben" placeholder="z. B. Karlsburg BA3 BS-Sanierung">
@@ -446,6 +453,45 @@ pdfDrop.addEventListener('drop', e => {
   e.preventDefault(); pdfDrop.style.borderColor='var(--line)';
   if(e.dataTransfer.files[0]) handlePdf(e.dataTransfer.files[0]);
 });
+
+/* ---------- Auftrag aus CRM (.json) ---------- */
+const auftragBtn = document.getElementById('auftragBtn');
+const auftragInput = document.getElementById('auftragInput');
+const auftragStatus = document.getElementById('auftragStatus');
+let importierteKundeId = null; // gilt als sicher, solange Kunde/Bauvorhaben nicht von Hand geändert werden
+
+auftragBtn.addEventListener('click', () => auftragInput.click());
+auftragInput.addEventListener('change', e => { if(e.target.files[0]) handleAuftragsdatei(e.target.files[0]); });
+
+async function handleAuftragsdatei(file){
+  auftragStatus.textContent = 'Lese Auftragsdatei ...';
+  auftragStatus.className = 'pdf-status';
+  try{
+    const text = await file.text();
+    const daten = JSON.parse(text);
+    if(daten.typ !== 'ts-auftrag'){
+      throw new Error('Keine gültige TS-Suite-Auftragsdatei.');
+    }
+    if(daten.kunde)        document.getElementById('fKunde').value = daten.kunde;
+    if(daten.bauvorhaben)  document.getElementById('fBauvorhaben').value = daten.bauvorhaben;
+    if(daten.ansprechpartner) document.getElementById('fAnsprechpartner').value = daten.ansprechpartner;
+    if(daten.telefon)      document.getElementById('fTelefon').value = daten.telefon;
+    if(daten.email)        document.getElementById('fEmail').value = daten.email;
+    if(daten.hinweis)      document.getElementById('fHinweis').value = daten.hinweis;
+    importierteKundeId = daten.kunde_id || null;
+
+    auftragStatus.textContent = `Auftrag geladen: ${daten.bauvorhaben || '–'} · ${daten.kunde || 'ohne Kunde'}`;
+    auftragStatus.className = 'pdf-status ok';
+  } catch(err){
+    console.error('Auftragsdatei-Import fehlgeschlagen:', err);
+    auftragStatus.textContent = 'Datei konnte nicht gelesen werden — ist es eine Auftragsdatei aus dem CRM?';
+    auftragStatus.className = 'pdf-status err';
+  }
+}
+/* Manuelle Korrektur nach dem Laden hebt die sichere Zuordnung wieder auf,
+   dann greift beim Speichern wieder der normale Namensabgleich. */
+document.getElementById('fKunde').addEventListener('input', () => { importierteKundeId = null; });
+document.getElementById('fBauvorhaben').addEventListener('input', () => { importierteKundeId = null; });
 
 async function handlePdf(file){
   pdfStatus.textContent = 'Lese PDF ...';
@@ -1072,13 +1118,41 @@ function supabaseHeaders(extra){
 
 /* ---------- Kontakte: lokal gecachte Kopie + Sync ---------- */
 const LS_KONTAKTE = 'ts_kontakte_cache';
-let kontakteMap = {}; // { bauvorhaben(lowercase): {ansprechpartner, telefon, kunde} }
+const LS_KUNDEN = 'ts_kunden_cache';
+let kontakteMap = {}; // { bauvorhaben(lowercase): {ansprechpartner, telefon, kunde, kunde_id} }
+let kundenNameZuId = {}; // { normalisierter Kundenname: id } — für automatische Verknüpfung
+
+function normText(s){
+  return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 function ladeKontakteAusCache(){
   try{ kontakteMap = JSON.parse(localStorage.getItem(LS_KONTAKTE) || '{}'); }catch(e){ kontakteMap = {}; }
+  try{ kundenNameZuId = JSON.parse(localStorage.getItem(LS_KUNDEN) || '{}'); }catch(e){ kundenNameZuId = {}; }
 }
 function speichereKontakteCache(){
   localStorage.setItem(LS_KONTAKTE, JSON.stringify(kontakteMap));
+}
+
+async function syncKundenVonServer(){
+  if(!SUPABASE_CONFIGURED) return;
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kunden?select=id,name`, { headers: supabaseHeaders() });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    kundenNameZuId = {};
+    const dl = document.getElementById('kundenListe');
+    dl.innerHTML = '';
+    rows.forEach(k => {
+      kundenNameZuId[normText(k.name)] = k.id;
+      const opt = document.createElement('option');
+      opt.value = k.name;
+      dl.appendChild(opt);
+    });
+    localStorage.setItem(LS_KUNDEN, JSON.stringify(kundenNameZuId));
+  } catch(err){
+    console.error('Kunden-Sync fehlgeschlagen:', err);
+  }
 }
 
 async function syncKontakteVonServer(){
@@ -1093,7 +1167,7 @@ async function syncKontakteVonServer(){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
     rows.forEach(r => {
-      kontakteMap[r.bauvorhaben.toLowerCase()] = { ansprechpartner: r.ansprechpartner, telefon: r.telefon, email: r.email, kunde: r.kunde };
+      kontakteMap[r.bauvorhaben.toLowerCase()] = { id: r.id, bauvorhaben: r.bauvorhaben, ansprechpartner: r.ansprechpartner, telefon: r.telefon, email: r.email, kunde: r.kunde, kunde_id: r.kunde_id };
     });
     speichereKontakteCache();
     statusEl.textContent = `Kontakte synchronisiert (${rows.length} Bauvorhaben bekannt).`;
@@ -1105,27 +1179,128 @@ async function syncKontakteVonServer(){
   }
 }
 
+/* Einfache Levenshtein-Distanz — für den Ähnlichkeits-Check unten,
+   läuft komplett lokal, kein Server nötig. */
+function levenshtein(a, b){
+  const m = a.length, n = b.length;
+  if(!m) return n;
+  if(!n) return m;
+  let prev = Array.from({length: n + 1}, (_, i) => i);
+  for(let i = 1; i <= m; i++){
+    const curr = [i];
+    for(let j = 1; j <= n; j++){
+      curr[j] = a[i-1] === b[j-1] ? prev[j-1] : 1 + Math.min(prev[j-1], prev[j], curr[j-1]);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+/* Findet ein bereits bekanntes Bauvorhaben, das dem eingegebenen Text
+   sehr ähnlich ist (Tippfehler, leicht andere Schreibweise) — Grundlage
+   für die Warnung, die verhindert, dass aus Versehen ein doppelter
+   Eintrag statt einer Umbenennung entsteht. */
+function findeAehnlichesBauvorhaben(text){
+  const norm = normText(text);
+  if(!norm) return null;
+  let bester = null, besterAbstand = Infinity;
+  for(const key in kontakteMap){
+    if(key === norm) continue;
+    const dist = levenshtein(norm, key);
+    const schwelle = Math.max(2, Math.floor(Math.max(norm.length, key.length) * 0.15));
+    if(dist <= schwelle && dist < besterAbstand){
+      besterAbstand = dist; bester = kontakteMap[key];
+    }
+  }
+  return bester;
+}
+
 async function upsertKontakt(){
-  const bauvorhaben = document.getElementById('fBauvorhaben').value.trim();
+  let bauvorhaben = document.getElementById('fBauvorhaben').value.trim();
   const ansprechpartner = document.getElementById('fAnsprechpartner').value.trim();
   const telefon = document.getElementById('fTelefon').value.trim();
   let email = document.getElementById('fEmail').value.trim();
   if(email && !EMAIL_REGEX.test(email)) email = ''; // ungültige E-Mail nie speichern
-  const kunde = document.getElementById('fKunde').value.trim();
+  let kunde = document.getElementById('fKunde').value.trim();
   if(!bauvorhaben || (!ansprechpartner && !telefon && !email)) return;
 
-  kontakteMap[bauvorhaben.toLowerCase()] = { ansprechpartner, telefon, email, kunde };
+  // Upsert-Risiko absichern: bei einem neuen Bauvorhaben-Namen erst prüfen,
+  // ob nicht eigentlich ein fast identischer schon existiert (Tippfehler-Fall).
+  if(!kontakteMap[bauvorhaben.toLowerCase()]){
+    const aehnlich = findeAehnlichesBauvorhaben(bauvorhaben);
+    if(aehnlich){
+      const uebernehmen = confirm(
+        `Ähnliches Bauvorhaben schon vorhanden:\n"${aehnlich.bauvorhaben}"\n\n` +
+        `OK = dieses verwenden (empfohlen, sonst entsteht ein doppelter Eintrag)\n` +
+        `Abbrechen = "${bauvorhaben}" wirklich neu anlegen`
+      );
+      if(uebernehmen){
+        bauvorhaben = aehnlich.bauvorhaben;
+        document.getElementById('fBauvorhaben').value = bauvorhaben;
+        if(aehnlich.kunde && !kunde){
+          kunde = aehnlich.kunde;
+          document.getElementById('fKunde').value = kunde;
+        }
+      }
+    }
+  }
+
+  const kundeId = importierteKundeId || kundenNameZuId[normText(kunde)] || null;
+  const bestehend = kontakteMap[bauvorhaben.toLowerCase()];
+  kontakteMap[bauvorhaben.toLowerCase()] = { id: bestehend?.id, bauvorhaben, ansprechpartner, telefon, email, kunde, kunde_id: kundeId };
   speichereKontakteCache();
 
   if(!SUPABASE_CONFIGURED) return;
   try{
-    await fetch(`${SUPABASE_URL}/rest/v1/kontakte?on_conflict=bauvorhaben`, {
+    const zeile = { bauvorhaben, kunde, ansprechpartner, telefon, email, updated_at: new Date().toISOString() };
+    if(kundeId) zeile.kunde_id = kundeId; // nur bei sicherem Treffer setzen — sonst bleibt eine
+                                           // bestehende Zuordnung in der DB unangetastet
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kontakte?on_conflict=bauvorhaben`, {
       method: 'POST',
-      headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-      body: JSON.stringify([{ bauvorhaben, kunde, ansprechpartner, telefon, email, updated_at: new Date().toISOString() }])
+      headers: supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+      body: JSON.stringify([zeile])
     });
+    if(res.ok){
+      const gespeichert = await res.json();
+      const kontaktId = gespeichert?.[0]?.id;
+      if(kontaktId){
+        kontakteMap[bauvorhaben.toLowerCase()].id = kontaktId;
+        speichereKontakteCache();
+        if(ansprechpartner) upsertAnsprechpartnerStrukturiert(kontaktId, ansprechpartner, telefon, email);
+      }
+    }
   } catch(err){
     console.error('Kontakt-Upload fehlgeschlagen:', err);
+  }
+}
+
+/* Ansprechpartner-Konsolidierung: legt denselben Ansprechpartner zusätzlich
+   strukturiert in crm_ansprechpartner an (oder aktualisiert ihn dort),
+   damit das CRM ihn kennt, ohne dass du ihn dort nochmal eintippen musst.
+   kontakte.ansprechpartner bleibt daneben bestehen — die Telefon-Suche auf
+   der Startseite braucht dieses Feld weiterhin. Läuft im Hintergrund,
+   ein Fehler hier verhindert nie das Speichern des Berichts. */
+async function upsertAnsprechpartnerStrukturiert(kontaktId, name, telefon, email){
+  try{
+    const suchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/crm_ansprechpartner?kontakt_id=eq.${kontaktId}&name=ilike.${encodeURIComponent(name)}&select=id`,
+      { headers: supabaseHeaders() }
+    );
+    const treffer = suchRes.ok ? await suchRes.json() : [];
+    if(treffer.length){
+      await fetch(`${SUPABASE_URL}/rest/v1/crm_ansprechpartner?id=eq.${treffer[0].id}`, {
+        method: 'PATCH',
+        headers: supabaseHeaders(),
+        body: JSON.stringify({ telefon: telefon || null, email: email || null })
+      });
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/crm_ansprechpartner`, {
+        method: 'POST',
+        headers: supabaseHeaders(),
+        body: JSON.stringify([{ kontakt_id: kontaktId, name, telefon: telefon || null, email: email || null }])
+      });
+    }
+  } catch(err){
+    console.error('Ansprechpartner-Konsolidierung fehlgeschlagen (unkritisch):', err);
   }
 }
 
@@ -1133,9 +1308,11 @@ function autofillKontaktFuerBauvorhaben(){
   const bauvorhaben = document.getElementById('fBauvorhaben').value.trim().toLowerCase();
   if(!bauvorhaben || !kontakteMap[bauvorhaben]) return;
   const eintrag = kontakteMap[bauvorhaben];
+  const kundeField = document.getElementById('fKunde');
   const apField = document.getElementById('fAnsprechpartner');
   const telField = document.getElementById('fTelefon');
   const emailField = document.getElementById('fEmail');
+  if(!kundeField.value && eintrag.kunde) kundeField.value = eintrag.kunde;
   if(!apField.value && eintrag.ansprechpartner) apField.value = eintrag.ansprechpartner;
   if(!telField.value && eintrag.telefon) telField.value = eintrag.telefon;
   if(!emailField.value && eintrag.email) emailField.value = eintrag.email;
@@ -1281,6 +1458,7 @@ async function sendeBerichtAnServer(reportData){
 /* Beim Start: gecachte Kontakte laden, dann mit Server abgleichen */
 ladeKontakteAusCache();
 syncKontakteVonServer();
+syncKundenVonServer();
 
 /* ---------- DB-Status-Ampel ---------- */
 async function pruefeDbStatus(){
